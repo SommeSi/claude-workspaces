@@ -56,10 +56,12 @@ If `git log main..HEAD` (or `develop..HEAD`) shows any commits for any repo, sho
 
 > ⚠️ Branch `<branch>` has N commit(s) not in main/develop in `<repo_name>`:
 > `<commit list>`
-> Branch is not merged. Delete anyway? [y/N]
+> This branch is **NOT merged**. Deleting it means losing this work.
 > Tip: consider creating a PR first (`gh pr create`).
+>
+> Are you absolutely sure you want to delete unmerged work? Type "delete unmerged" to confirm.
 
-Default is **NO**. Only proceed if the user explicitly answers `y` or `yes`.
+Default is **NO**. Only proceed if the user explicitly types `delete unmerged`. This is stricter than other confirmations because losing unmerged work is the most dangerous action.
 
 ### Check 3 — Branch not on remote (worktree mode only, informational)
 
@@ -202,7 +204,7 @@ Read the registry, remove the entry for this slot, and write it back:
 cat ~/.claude-workspaces/registry.json
 ```
 
-Remove the key matching this slot from `workspaces`. Recalculate `next_slot` as `min(freed_slot, current_next_slot)` so freed slots can be reused.
+Remove the key matching this slot from `workspaces`. Recalculate `next_slot` as `max(remaining_slots) + 1` (or `1` if no workspaces remain). Slot reuse is handled automatically by the "scan 1, 2, 3... for first free" allocation algorithm in the start skills.
 
 Write the updated registry to `~/.claude-workspaces/registry.json`.
 

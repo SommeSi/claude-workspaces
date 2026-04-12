@@ -13,7 +13,7 @@ Read-only skill — never modifies anything.
 ## Step 1 — Read registry
 
 ```bash
-cat ~/.claude-workspaces/registry.json 2>/dev/null
+cat ~/.claude-workspaces/registry.json 2>/dev/null || echo '{"workspaces":{},"next_slot":1}'
 ```
 
 - If the file is missing or `workspaces` is empty: reply with "No active workspaces. Use /ws:start-worktree or /ws:start-sandbox." and stop.
