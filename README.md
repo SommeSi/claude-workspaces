@@ -20,6 +20,7 @@ After installation, restart Claude Code. You'll have access to these skills:
 | `/ws:start-sandbox` | Create a lightweight workspace (mkdir + git init) |
 | `/ws:list` | List all active workspaces with status |
 | `/ws:resume` | Load workspace context and color terminal |
+| `/ws:attach` | Attach a workspace to an existing directory (no worktree, no new dir) |
 | `/ws:finish` | Finalize workspace — safety checks, cleanup |
 
 ## What is a workspace?
