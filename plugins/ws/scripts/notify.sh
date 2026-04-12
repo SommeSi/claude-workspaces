@@ -9,11 +9,14 @@ REGISTRY="$HOME/.claude-workspaces/registry.json"
 WS_EMOJI=""
 WS_BRANCH=""
 WS_SLOT=""
+WS_GOAL=""
+WS_PATH=""
 
 if [ -f "$REGISTRY" ] && command -v python3 &>/dev/null; then
   # Use python3 for reliable JSON parsing — matches PWD against workspace paths
+  # Also extracts the goal from CLAUDE.local.md if available
   eval "$(python3 -c "
-import json, os, sys
+import json, os, sys, re
 try:
     reg = json.load(open(os.path.expanduser('~/.claude-workspaces/registry.json')))
     cwd = os.getcwd()
@@ -31,25 +34,42 @@ try:
     if best_ws:
         name = best_ws.get('branch') or best_ws.get('slug', 'workspace')
         emoji = best_ws.get('emoji', '')
+        wp = best_ws.get('workspace_path', '')
         print(f'WS_EMOJI={emoji!r}')
         print(f'WS_BRANCH={name!r}')
         print(f'WS_SLOT={best_slot!r}')
+        print(f'WS_PATH={wp!r}')
+        # Extract goal from CLAUDE.local.md
+        claude_md = os.path.join(wp, 'CLAUDE.local.md')
+        if os.path.isfile(claude_md):
+            content = open(claude_md).read()
+            m = re.search(r'## Goal of this workspace\s*\n+(.+)', content)
+            if m:
+                goal = m.group(1).strip()[:80]
+                print(f'WS_GOAL={goal!r}')
 except Exception:
     pass
 " 2>/dev/null)" 2>/dev/null || true
 fi
 
-# --- Build notification message ---
+# --- Build notification ---
 TITLE="${WS_EMOJI:+$WS_EMOJI }${WS_BRANCH:-Claude Code}${WS_SLOT:+ [w$WS_SLOT]}"
 MESSAGE="${1:-Task completed}"
 
-# Add sound indicator
-SOUND="default"
+# Append goal to message if available
+if [ -n "$WS_GOAL" ]; then
+  MESSAGE="$MESSAGE — $WS_GOAL"
+fi
 
 # --- Send notification (platform-specific) ---
 case "$(uname -s)" in
   Darwin)
-    osascript -e "display notification \"$MESSAGE\" with title \"$TITLE\" sound name \"$SOUND\"" 2>/dev/null || true
+    # Prefer terminal-notifier (more reliable in sandboxed environments)
+    if command -v terminal-notifier &>/dev/null; then
+      terminal-notifier -title "$TITLE" -message "$MESSAGE" -sound default 2>/dev/null || true
+    else
+      osascript -e "display notification \"$MESSAGE\" with title \"$TITLE\" sound name \"default\"" 2>/dev/null || true
+    fi
     ;;
   Linux)
     if command -v notify-send &>/dev/null; then
