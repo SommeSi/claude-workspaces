@@ -1,18 +1,27 @@
 {
-  "description": "Workspace-aware notifications — alerts with workspace badge on task completion or input needed",
   "hooks": {
     "Stop": [
       {
-        "type": "command",
-        "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh 'Done — waiting for input'",
-        "timeout": 5
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh\" 'Done — waiting for input'",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Notification": [
       {
-        "type": "command",
-        "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh '$NOTIFICATION_MESSAGE'",
-        "timeout": 5
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh\" 'Notification'",
+            "timeout": 5
+          }
+        ]
       }
     ]
   }
