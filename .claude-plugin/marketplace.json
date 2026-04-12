@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-workspaces",
+  "description": "Workspace manager for Claude Code — isolated sessions with colored terminals, git worktrees, and per-workspace context",
+  "owner": {
+    "name": "sommesi"
+  },
+  "plugins": [
+    {
+      "name": "ws",
+      "description": "Workspace manager with colored terminals, git worktrees, and per-workspace Claude context",
+      "version": "0.1.0",
+      "author": {
+        "name": "sommesi"
+      },
+      "source": ".",
+      "category": "development"
+    }
+  ]
+}
