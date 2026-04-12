@@ -26,8 +26,11 @@ Compare the current directory against every `workspace_path` and `repos[].path` 
 
 - **Match found**: use that workspace entry. Continue to Step 2.
 - **No match, workspaces exist**: display the workspace list (same format as `/workspace:list`) and ask the user which one to resume.
-- **No workspaces at all**: inform the user no workspace was found and suggest:
-  > Use `/workspace:start-worktree` to create a git-based workspace, or `/workspace:start-sandbox` for an isolated sandbox.
+- **No match, no workspaces, or no workspaces for this directory**: inform the user and suggest all three options:
+  > No workspace found for this directory. You can:
+  > - `/workspace:attach` — attach a workspace to this existing directory (slot + color + context, no worktree)
+  > - `/workspace:start-worktree` — create a new workspace with git worktree isolation
+  > - `/workspace:start-sandbox` — create a lightweight isolated sandbox
 
 ---
 
