@@ -13,7 +13,7 @@
       "author": {
         "name": "sommesi"
       },
-      "source": ".",
+      "source": "./plugins/ws",
       "category": "development"
     }
   ]

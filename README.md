@@ -1,15 +1,18 @@
-# ws — Claude Code Workspace Manager
+# claude-workspaces
 
-Manage isolated workspaces for parallel development with Claude Code.
+A Claude Code plugin marketplace for managing isolated workspaces with colored terminals, git worktrees, and per-workspace context.
 
-Each workspace gets:
-- A **colored terminal** (background + title) so you know where you are
-- **Git worktree** isolation (or a lightweight sandbox)
-- **CLAUDE.local.md** with workspace context and badge
-- **Dedicated ports** to run multiple apps in parallel
-- **VS Code/Cursor colors** matching the terminal
+## Installation
 
-## Skills
+```bash
+# Add the marketplace
+claude plugins marketplace add SommeSi/claude-workspaces
+
+# Install the ws plugin
+claude plugins install ws
+```
+
+After installation, restart Claude Code. You'll have access to these skills:
 
 | Skill | Description |
 |-------|-------------|
@@ -19,11 +22,24 @@ Each workspace gets:
 | `/ws:resume` | Load workspace context and color terminal |
 | `/ws:finish` | Finalize workspace — safety checks, cleanup |
 
-## Setup
+## What is a workspace?
 
-### Project config (optional)
+A workspace is an isolated work session. Each one gets:
 
-Create `.claude-workspaces.json` at your project root:
+- **Colored terminal** — background color + title so you know where you are at a glance
+- **Git worktree** isolation (or a lightweight sandbox) — each feature on its own branch, no stashing
+- **CLAUDE.local.md** — Claude knows the goal and context of this workspace in every session
+- **Dedicated ports** — run multiple dev servers in parallel without conflicts
+- **VS Code/Cursor colors** — IDE title bar matches the terminal color
+- **Desktop notifications** — get notified with the workspace badge when Claude finishes
+
+## Why?
+
+When you're working with Claude Code, you often need to wait for a response. Instead of sitting idle, switch to another terminal with a different workspace and keep going. The colored terminals and badges make it impossible to get lost.
+
+## Project config (optional)
+
+For worktree workspaces, create `.claude-workspaces.json` at your project root:
 
 ```json
 {
@@ -40,17 +56,54 @@ Create `.claude-workspaces.json` at your project root:
 }
 ```
 
+Multi-repo example (e.g., Rails + Next.js):
+
+```json
+{
+  "repos": [
+    { "name": "back", "origin": ".", "port_base": 3001 },
+    { "name": "front", "origin": "../frontend-app", "port_base": 3000 }
+  ],
+  "port_step": 10,
+  "workspaces_root": "~/workspaces",
+  "hooks": {
+    "db_create": "bin/db-create $SLOT",
+    "db_destroy": "bin/db-drop $SLOT"
+  }
+}
+```
+
 If no config exists, `/ws:start-worktree` will guide you through creating one.
 
 ## Requirements
 
-- Claude Code
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - git
 - A terminal supporting OSC 11 (WezTerm, iTerm2, Kitty, Windows Terminal, most modern terminals)
 - macOS, Linux, or WSL
+- python3 (for desktop notifications)
 
 ## How it works
 
 No runtime, no CLI, no dependencies. The plugin is pure markdown skills — Claude executes everything using its built-in tools (Bash, Read, Write, Edit).
 
 State is stored in `~/.claude-workspaces/registry.json`.
+
+## Color palette
+
+Each workspace slot gets a unique color (cycles after 8):
+
+| Slot | Color |
+|------|-------|
+| 1 | 🟢 Green |
+| 2 | 🟠 Orange |
+| 3 | 🟣 Purple |
+| 4 | 🔴 Red |
+| 5 | 🩵 Cyan |
+| 6 | 🩷 Pink |
+| 7 | 🟡 Yellow |
+| 8 | 🔵 Blue |
+
+## License
+
+MIT
