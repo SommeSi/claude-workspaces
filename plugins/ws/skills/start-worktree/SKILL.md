@@ -20,7 +20,7 @@ git rev-parse --show-toplevel
 
 - If the command succeeds, note the git root path. Continue to Step 2.
 - If it fails (not a git repository), stop and tell the user:
-  > This directory is not inside a git repository. Use `/ws:start-sandbox` instead to create an isolated workspace without git.
+  > This directory is not inside a git repository. Use `/workspace:start-sandbox` instead to create an isolated workspace without git.
 
 ---
 
@@ -311,8 +311,8 @@ Show a concise success message. For example:
 Next steps:
   • cd /Users/you/workspaces/feat-polo-export-csv/back
   • Open a new Claude Code session in the workspace directory
-  • Use /ws:resume to reattach later
-  • Use /ws:finish when done with this workspace
+  • Use /workspace:resume to reattach later
+  • Use /workspace:finish when done with this workspace
 ```
 
 ---

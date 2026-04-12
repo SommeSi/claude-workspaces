@@ -25,9 +25,9 @@ cat ~/.claude-workspaces/registry.json 2>/dev/null || echo '{"workspaces":{},"ne
 Compare the current directory against every `workspace_path` and `repos[].path` entry in the registry. Use longest-prefix matching.
 
 - **Match found**: use that workspace entry. Continue to Step 2.
-- **No match, workspaces exist**: display the workspace list (same format as `/ws:list`) and ask the user which one to resume.
+- **No match, workspaces exist**: display the workspace list (same format as `/workspace:list`) and ask the user which one to resume.
 - **No workspaces at all**: inform the user no workspace was found and suggest:
-  > Use `/ws:start-worktree` to create a git-based workspace, or `/ws:start-sandbox` for an isolated sandbox.
+  > Use `/workspace:start-worktree` to create a git-based workspace, or `/workspace:start-sandbox` for an isolated sandbox.
 
 ---
 

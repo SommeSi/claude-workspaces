@@ -227,7 +227,7 @@ Show a concise success message:
 ✅ Workspace w<slot> (<slug>) removed. Slot freed.
 <if memory saved> 💾 Memory "<name>" saved.
 
-You can: /ws:list, /ws:start-worktree, /ws:start-sandbox
+You can: /workspace:list, /workspace:start-worktree, /workspace:start-sandbox
 ```
 
 ---

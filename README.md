@@ -9,19 +9,19 @@ A Claude Code plugin marketplace for managing isolated workspaces with colored t
 claude plugins marketplace add SommeSi/claude-workspaces
 
 # Install the ws plugin
-claude plugins install ws
+claude plugins install workspace
 ```
 
 After installation, restart Claude Code. You'll have access to these skills:
 
 | Skill | Description |
 |-------|-------------|
-| `/ws:start-worktree` | Create a workspace with git worktree isolation |
-| `/ws:start-sandbox` | Create a lightweight workspace (mkdir + git init) |
-| `/ws:list` | List all active workspaces with status |
-| `/ws:resume` | Load workspace context and color terminal |
-| `/ws:attach` | Attach a workspace to an existing directory (no worktree, no new dir) |
-| `/ws:finish` | Finalize workspace — safety checks, cleanup |
+| `/workspace:start-worktree` | Create a workspace with git worktree isolation |
+| `/workspace:start-sandbox` | Create a lightweight workspace (mkdir + git init) |
+| `/workspace:list` | List all active workspaces with status |
+| `/workspace:resume` | Load workspace context and color terminal |
+| `/workspace:attach` | Attach a workspace to an existing directory (no worktree, no new dir) |
+| `/workspace:finish` | Finalize workspace — safety checks, cleanup |
 
 ## What is a workspace?
 
@@ -74,7 +74,7 @@ Multi-repo example (e.g., Rails + Next.js):
 }
 ```
 
-If no config exists, `/ws:start-worktree` will guide you through creating one.
+If no config exists, `/workspace:start-worktree` will guide you through creating one.
 
 ## Requirements
 

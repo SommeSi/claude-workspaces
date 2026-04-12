@@ -16,7 +16,7 @@ Read-only skill — never modifies anything.
 cat ~/.claude-workspaces/registry.json 2>/dev/null || echo '{"workspaces":{},"next_slot":1}'
 ```
 
-- If the file is missing or `workspaces` is empty: reply with "No active workspaces. Use /ws:start-worktree or /ws:start-sandbox." and stop.
+- If the file is missing or `workspaces` is empty: reply with "No active workspaces. Use /workspace:start-worktree or /workspace:start-sandbox." and stop.
 
 ---
 
@@ -64,12 +64,12 @@ Below each row, display the last commit on a separate indented line:
 
 After the table, print any applicable warnings:
 
-- **Orphaned workspace** (path doesn't exist): warn with a note like `⚠ Slot 3: workspace path not found — consider /ws:finish to clean up.`
+- **Orphaned workspace** (path doesn't exist): warn with a note like `⚠ Slot 3: workspace path not found — consider /workspace:finish to clean up.`
 - **Many uncommitted files** (>5 in a workspace): warn with `⚠ Slot 1: 8 uncommitted files.`
 
 End with a prompt:
 
-> Want to resume one? Run `/ws:resume` and specify the slot number.
+> Want to resume one? Run `/workspace:resume` and specify the slot number.
 
 ---
 

@@ -212,8 +212,8 @@ Show a concise success message. For example:
 Your terminal and IDE are now colored for this workspace.
 
 Next steps:
-  • Use /ws:resume to reattach color and context in future sessions
-  • Use /ws:finish when you're done with this workspace
+  • Use /workspace:resume to reattach color and context in future sessions
+  • Use /workspace:finish when you're done with this workspace
 ```
 
 ---

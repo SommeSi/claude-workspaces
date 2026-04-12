@@ -190,8 +190,8 @@ Ready to go. Fresh git repo — start building!
 Next steps:
   • cd /Users/you/workspaces/experiment-new-api
   • Open a new Claude Code session in the workspace directory
-  • Use /ws:resume to reattach later
-  • Use /ws:finish when done with this workspace
+  • Use /workspace:resume to reattach later
+  • Use /workspace:finish when done with this workspace
 ```
 
 ---
