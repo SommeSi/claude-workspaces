@@ -1,0 +1,11 @@
+{
+  "name": "ws",
+  "version": "0.1.0",
+  "description": "Workspace manager for Claude Code — isolated sessions with colored terminals, git worktrees, and per-workspace context",
+  "author": {
+    "name": "sommesi"
+  },
+  "repository": "https://github.com/sommesi/claude-workspaces",
+  "license": "MIT",
+  "keywords": ["workspaces", "worktrees", "git", "isolation", "parallel"]
+}
