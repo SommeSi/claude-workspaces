@@ -15,22 +15,29 @@
 
 ## Terminal Coloring
 
-Apply color to current terminal:
+Apply color to current terminal. **Important:** Claude Code's Bash tool captures stdout, so escape sequences must be written directly to the parent process's TTY device.
 
 ```bash
-# Set background color (OSC 11)
-printf '\033]11;#1a3a2a\007'
+# Detect the parent terminal device
+TTY_DEV="/dev/$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ')"
 
-# Set window/tab title (OSC 0)
-printf '\033]0;🟢 feat/polo/export-csv [w1]\007'
+# Set background color (OSC 11)
+printf '\033]11;#1a3a2a\007' > "$TTY_DEV" 2>/dev/null
+
+# Set tab name (OSC 1) and window title (OSC 0)
+printf '\033]1;🟢 feat/polo/export-csv [w1]\007' > "$TTY_DEV" 2>/dev/null
+printf '\033]0;🟢 feat/polo/export-csv [w1]\007' > "$TTY_DEV" 2>/dev/null
 ```
 
 ## Reset Terminal
 
 ```bash
-# Reset background to default (OSC 11 with empty value)
-printf '\033]11;\007'
+TTY_DEV="/dev/$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ')"
 
-# Reset title
-printf '\033]0;\007'
+# Reset background to default
+printf '\033]11;\007' > "$TTY_DEV" 2>/dev/null
+
+# Reset tab name and window title
+printf '\033]1;\007' > "$TTY_DEV" 2>/dev/null
+printf '\033]0;\007' > "$TTY_DEV" 2>/dev/null
 ```

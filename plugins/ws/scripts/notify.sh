@@ -60,4 +60,9 @@ esac
 
 # --- Always send OSC 9 terminal notification as fallback ---
 # Supported by WezTerm, iTerm2, Kitty, Windows Terminal
-printf '\033]9;%s: %s\007' "$TITLE" "$MESSAGE" 2>/dev/null || true
+TTY_DEV="/dev/$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ')"
+if [ -w "$TTY_DEV" ]; then
+  printf '\033]9;%s: %s\007' "$TITLE" "$MESSAGE" > "$TTY_DEV" 2>/dev/null || true
+else
+  printf '\033]9;%s: %s\007' "$TITLE" "$MESSAGE" 2>/dev/null || true
+fi

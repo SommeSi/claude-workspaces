@@ -213,8 +213,13 @@ Write the updated registry to `~/.claude-workspaces/registry.json`.
 Reset the terminal title and background color:
 
 ```bash
-printf '\033]11;\007'
-printf '\033]0;\007'
+# Detect the parent terminal device (Claude Code captures stdout)
+TTY_DEV="/dev/$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ')"
+
+# Reset background, tab name, and window title
+printf '\033]11;\007' > "$TTY_DEV" 2>/dev/null
+printf '\033]1;\007' > "$TTY_DEV" 2>/dev/null
+printf '\033]0;\007' > "$TTY_DEV" 2>/dev/null
 ```
 
 ---

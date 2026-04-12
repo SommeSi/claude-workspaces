@@ -75,11 +75,15 @@ git -C <primary_repo_path> diff --stat
 Apply the workspace color using OSC sequences. See `references/color-palette.md`.
 
 ```bash
-# Set background color (OSC 11)
-printf '\033]11;<hex-color>\007'
+# Detect the parent terminal device (Claude Code captures stdout)
+TTY_DEV="/dev/$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ')"
 
-# Set window/tab title (OSC 0)
-printf '\033]0;<emoji> <branch-or-slug> [w<slot>]\007'
+# Set background color (OSC 11)
+printf '\033]11;<hex-color>\007' > "$TTY_DEV" 2>/dev/null
+
+# Set tab name (OSC 1) and window title (OSC 0)
+printf '\033]1;<emoji> <branch-or-slug> [w<slot>]\007' > "$TTY_DEV" 2>/dev/null
+printf '\033]0;<emoji> <branch-or-slug> [w<slot>]\007' > "$TTY_DEV" 2>/dev/null
 ```
 
 ---
