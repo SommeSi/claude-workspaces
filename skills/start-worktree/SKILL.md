@@ -58,7 +58,7 @@ Example config structure:
 
 ```json
 {
-  "workspace_root": "~/workspaces",
+  "workspaces_root": "~/workspaces",
   "port_step": 10,
   "repos": [
     {
@@ -103,7 +103,7 @@ Ask: **Is there a spec or ticket link for this work?** (optional — "no" or Ent
 
 ## Step 4 — Load registry and allocate slot
 
-See @references/registry-format.md for the full schema and allocation rules.
+See references/registry-format.md for the full schema and allocation rules.
 
 ### 4a — Read the registry
 
@@ -117,7 +117,7 @@ Scan keys `1, 2, 3, ...` in `workspaces` and return the first missing key. This 
 
 ### 4c — Derive color and emoji
 
-See @references/color-palette.md. Compute: `index = (slot - 1) % 8`, then look up the corresponding hex color and emoji.
+See references/color-palette.md. Compute: `index = (slot - 1) % 8`, then look up the corresponding hex color and emoji.
 
 ### 4d — Calculate ports
 
@@ -135,10 +135,10 @@ Example: `feat/polo/export-csv` → `feat-polo-export-csv`
 
 ### 4f — Determine workspace path
 
-Expand `~` to `$HOME` in `workspace_root`, then:
+Expand `~` to `$HOME` in `workspaces_root`, then:
 
 ```
-workspace_path = <workspace_root>/<slug>
+workspace_path = <workspaces_root>/<slug>
 ```
 
 ---
@@ -209,7 +209,7 @@ Check the output of the first command. If it fails because the branch already ex
 
 ### 6c — Generate workspace files
 
-See @references/generated-files.md for the exact file contents and templates.
+See references/generated-files.md for the exact file contents and templates.
 
 - Write `<workspace_path>/CLAUDE.local.md` — fill in slot, branch, mode (`worktree`), creation date, repos list, user description, spec link.
 - Write `<workspace_path>/.vscode/settings.json` — fill in the hex color for title bar and status bar.
@@ -248,7 +248,7 @@ eval "<hook_command_with_substitutions>"
 
 Read the registry again (always re-read before writing to avoid races), add the new workspace entry, and update `next_slot`.
 
-See @references/registry-format.md for the exact schema.
+See references/registry-format.md for the exact schema.
 
 New entry structure:
 
@@ -282,7 +282,7 @@ mkdir -p ~/.claude-workspaces
 
 ### 6f — Color the terminal
 
-Apply the workspace color to the current terminal session. See @references/color-palette.md for OSC sequences.
+Apply the workspace color to the current terminal session. See references/color-palette.md for OSC sequences.
 
 ```bash
 # Set background color
