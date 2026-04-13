@@ -1,22 +1,25 @@
 #!/usr/bin/env bash
 # Workspace-aware notification for Claude Code
 # Called by Claude Code hooks on Stop/Notification events
+#
+# Usage: notify.sh [message]
+# The message is typically $CLAUDE_HOOK_RESPONSE from a prompt hook summary.
 
 set -euo pipefail
+
+MESSAGE="${1:-}"
 
 # --- Detect workspace from PWD ---
 REGISTRY="$HOME/.claude-workspaces/registry.json"
 WS_EMOJI=""
+WS_SLUG=""
 WS_BRANCH=""
 WS_SLOT=""
 WS_GOAL=""
-WS_PATH=""
 
 if [ -f "$REGISTRY" ] && command -v python3 &>/dev/null; then
-  # Use python3 for reliable JSON parsing — matches PWD against workspace paths
-  # Also extracts the goal from CLAUDE.local.md if available
   eval "$(python3 -c "
-import json, os, sys, re
+import json, os, re
 try:
     reg = json.load(open(os.path.expanduser('~/.claude-workspaces/registry.json')))
     cwd = os.getcwd()
@@ -32,43 +35,47 @@ try:
                 best_ws = ws
                 best_slot = slot
     if best_ws:
-        name = best_ws.get('branch') or best_ws.get('slug', 'workspace')
-        emoji = best_ws.get('emoji', '')
-        wp = best_ws.get('workspace_path', '')
-        print(f'WS_EMOJI={emoji!r}')
-        print(f'WS_BRANCH={name!r}')
+        print(f'WS_EMOJI={best_ws.get(\"emoji\", \"\")!r}')
+        print(f'WS_SLUG={best_ws.get(\"slug\", \"\")!r}')
+        print(f'WS_BRANCH={best_ws.get(\"branch\") or best_ws.get(\"slug\", \"\")!r}')
         print(f'WS_SLOT={best_slot!r}')
-        print(f'WS_PATH={wp!r}')
-        # Extract goal from CLAUDE.local.md
+        wp = best_ws.get('workspace_path', '')
         claude_md = os.path.join(wp, 'CLAUDE.local.md')
         if os.path.isfile(claude_md):
             content = open(claude_md).read()
             m = re.search(r'## Goal of this workspace\s*\n+(.+)', content)
             if m:
-                goal = m.group(1).strip()[:80]
-                print(f'WS_GOAL={goal!r}')
+                print(f'WS_GOAL={m.group(1).strip()[:80]!r}')
 except Exception:
     pass
 " 2>/dev/null)" 2>/dev/null || true
 fi
 
-# --- Build notification ---
-TITLE="${WS_EMOJI:+$WS_EMOJI }${WS_BRANCH:-Claude Code}${WS_SLOT:+ [w$WS_SLOT]}"
-MESSAGE="${1:-Task completed}"
-
-# Append goal to message if available
-if [ -n "$WS_GOAL" ]; then
-  MESSAGE="$MESSAGE — $WS_GOAL"
+# --- Build title: emoji + slug (worktree name) ---
+if [ -n "$WS_EMOJI" ]; then
+  TITLE="$WS_EMOJI ${WS_SLUG:-Claude Code}"
+else
+  TITLE="${WS_SLUG:-Claude Code}"
 fi
+
+# --- Build message: summary from prompt hook, fallback to goal ---
+if [ -z "$MESSAGE" ] && [ -n "$WS_GOAL" ]; then
+  MESSAGE="$WS_GOAL"
+fi
+[ -z "$MESSAGE" ] && MESSAGE="Done"
 
 # --- Send notification (platform-specific) ---
 case "$(uname -s)" in
   Darwin)
-    # Prefer terminal-notifier (more reliable in sandboxed environments)
     if command -v terminal-notifier &>/dev/null; then
-      terminal-notifier -title "$TITLE" -message "$MESSAGE" -sound default 2>/dev/null || true
+      terminal-notifier \
+        -title "$TITLE" \
+        -message "$MESSAGE" \
+        -sound Hero \
+        -group "claude-${WS_SLUG:-default}" \
+        >/dev/null 2>&1 || true
     else
-      osascript -e "display notification \"$MESSAGE\" with title \"$TITLE\" sound name \"default\"" 2>/dev/null || true
+      osascript -e "display notification \"$MESSAGE\" with title \"$TITLE\" sound name \"Hero\"" 2>/dev/null || true
     fi
     ;;
   Linux)
@@ -78,8 +85,7 @@ case "$(uname -s)" in
     ;;
 esac
 
-# --- Always send OSC 9 terminal notification as fallback ---
-# Supported by WezTerm, iTerm2, Kitty, Windows Terminal
+# --- OSC 9 terminal notification as fallback ---
 TTY_DEV="/dev/$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ')"
 if [ -w "$TTY_DEV" ]; then
   printf '\033]9;%s: %s\007' "$TITLE" "$MESSAGE" > "$TTY_DEV" 2>/dev/null || true
