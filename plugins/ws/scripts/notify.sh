@@ -7,7 +7,32 @@
 
 set -euo pipefail
 
-MESSAGE="${1:-}"
+# Read hook JSON from stdin (Claude Code pipes it to each hook command)
+HOOK_JSON=$(cat)
+
+# Extract last_assistant_message and trim to first sentence (max 80 chars)
+MESSAGE=""
+if [ -n "$HOOK_JSON" ] && command -v jq &>/dev/null; then
+  RAW=$(echo "$HOOK_JSON" | jq -r '.last_assistant_message // empty' 2>/dev/null)
+  if [ -n "$RAW" ] && command -v python3 &>/dev/null; then
+    MESSAGE=$(echo "$RAW" | python3 -c "
+import sys, re
+t = sys.stdin.read().strip()
+# Remove workspace badge line (e.g. emoji **[wN] slug**)
+t = re.sub(r'^.*?\[w\d+\][^\n]*\n*', '', t, count=1).strip()
+# Strip markdown formatting
+t = re.sub(r'[*#\x60|]', '', t)
+t = re.sub(r'[\[\]]', '', t)
+t = ' '.join(t.split())
+# First sentence, max 80 chars
+m = re.match(r'(.{0,80}[.!?])', t)
+print(m.group(1) if m else t[:80])
+" 2>/dev/null) || true
+  fi
+fi
+
+# Fallback to $1 if provided (backward compat with prompt hooks)
+[ -z "$MESSAGE" ] && MESSAGE="${1:-}"
 
 # --- Detect workspace from PWD ---
 REGISTRY="$HOME/.claude-workspaces/registry.json"

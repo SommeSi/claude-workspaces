@@ -5,13 +5,8 @@
         "matcher": "",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Generate a SHORT summary (max 10 words) of what you just completed or what you need from the user. Output ONLY the summary text, nothing else. No quotes, no prefix. Example: 'Fixed login bug, tests passing' or 'Need approval to delete the file'",
-            "timeout": 10
-          },
-          {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh\" \"$CLAUDE_HOOK_RESPONSE\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh\"",
             "timeout": 5
           }
         ]
