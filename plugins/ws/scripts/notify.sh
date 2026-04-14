@@ -7,6 +7,9 @@
 
 set -euo pipefail
 
+# Ensure Homebrew tools are in PATH (macOS)
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 # Read hook JSON from stdin (Claude Code pipes it to each hook command)
 HOOK_JSON=$(cat)
 
