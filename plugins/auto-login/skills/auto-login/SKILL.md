@@ -1,50 +1,59 @@
 ---
 name: auto-login
-description: Auto-login to a local dev app via browser MCP. Discovers login forms from source code, persists config, supports Playwright (Chrome) and Firefox. Triggers on "auto-login", "log me in", "connect me", "login to the app".
+description: Auto-login to a local dev app via browser MCP. Reads shared .auto-login.json config, resolves port dynamically, navigates to company/feature. Supports Playwright (Chrome) and Firefox. Triggers on "auto-login", "log me in", "connect me", "login to the app".
 ---
 
 # Auto-login
 
-Automatically logs into a local dev app by discovering the login form from source code, reading credentials, and driving a browser via MCP.
+Automatically logs into a local dev app using shared team config, then navigates to the right company and feature page.
 
 ---
 
-## Step 1 — Check for existing config
+## Step 1 — Find and read config
 
-Look for `.auto-login.json` in the current working directory, then walk up parent directories until the git root.
+Look for `.auto-login.json` starting from the current directory, walking up to the git root. Also check if a workspace is active by reading `CLAUDE.local.md` in the current directory or parent.
 
 ```bash
-# Check current dir and parents up to git root
-cat .auto-login.json 2>/dev/null
+# Find config — check current dir and parents
+config_path=""
+dir="$PWD"
+while [ "$dir" != "/" ]; do
+  [ -f "$dir/.auto-login.json" ] && config_path="$dir/.auto-login.json" && break
+  dir=$(dirname "$dir")
+done
+cat "$config_path" 2>/dev/null
 ```
 
-- **Config found** → validate it (Step 4), then login (Step 5).
+- **Config found** → read it, then validate (Step 3), then login (Step 4).
 - **Config not found** → proceed to Step 2 (discovery).
+
+Also check for a memorized flow in `CLAUDE.local.md`:
+
+```bash
+grep "Auto-login flow" CLAUDE.local.md 2>/dev/null
+```
+
+If found (e.g. `humann-taconet/disbursement-accounts`), store for use in Step 5.
 
 ---
 
-## Step 2 — Select browser MCP
+## Step 2 — First-time setup (no config)
+
+### 2a — Select browser MCP
 
 Detect which browser MCPs are available by checking for their tools:
 
 1. Try `mcp__playwright__browser_navigate` → Playwright available
 2. Try `mcp__firefox-devtools__navigate_page` → Firefox available
 
-Present available options as a select:
+- If both available → ask with select (Playwright first):
+  > Which browser do you want to use?
+  > 1. Chrome (Playwright)
+  > 2. Firefox (DevTools)
+- If only one → use it directly.
+- If none → abort: "No browser MCP detected."
 
-> Which browser do you want to use?
-> 1. Chrome (Playwright)
-> 2. Firefox (DevTools)
-
-- If only one is available, use it directly without asking.
-- If none is available, abort:
-  > No browser MCP detected. Install the Playwright or Firefox DevTools MCP server to use auto-login.
-
-Save the choice for Step 5.
-
----
-
-## Step 3 — Discover login from source code
+### 2b — Discover login from source code
 
 Ask the user:
 
@@ -52,148 +61,129 @@ Ask the user:
 
 Then explore the project code to find:
 
-### 3a — Login URL
+**Login URL** — search for login-related routes/pages:
+- Next.js: `app/**/login/page.tsx`, `pages/login.tsx`
+- Rails: `config/routes.rb` for devise/session routes
+- Generic: files with `/login` or `/sign-in` URL patterns
 
-Search for login-related routes/pages:
-
-- Look for files containing `login`, `sign-in`, `signin`, `connexion` in route definitions, page components, or URL paths
-- Check framework-specific patterns:
-  - **Next.js**: `app/**/login/page.tsx`, `pages/login.tsx`
-  - **Rails**: `config/routes.rb` for devise/session routes
-  - **Generic**: any file with `/login` or `/sign-in` URL patterns
-- Check for a running dev server port (from workspace config, `.env.local`, `package.json` scripts, etc.)
-
-### 3b — Credentials
-
-Search for credential files in this order:
-
-1. `.env.local` → look for variables containing `EMAIL`, `PASSWORD`, `USER`, `CREDENTIALS`, `LOGIN`
+**Credentials** — search for credential files:
+1. `.env.local` → variables containing `EMAIL`, `PASSWORD`
 2. `.env.test` → same patterns
 3. `.env.development` → same patterns
-4. `cypress/`, `e2e/`, `test/` directories → look for test fixtures with login credentials
+4. `cypress/`, `e2e/`, `test/` → test fixtures with login credentials
 
-### 3c — Propose config
+**Form labels** — will be discovered on first login via browser snapshot (Step 4c).
+
+### 2c — Propose and save config
 
 Present what was found:
 
 > Here's what I found:
-> - **Login URL**: `http://localhost:3000/fr/login`
-> - **Credentials file**: `front/.env.local`
+> - **Login path**: `/fr/login`
+> - **Credentials file**: `.env.local`
 >   - Email var: `E2E_TEST_EMAIL`
 >   - Password var: `E2E_TEST_PASSWORD`
-> - **Browser**: Playwright (Chrome)
 >
 > Does this look right?
 > 1. Yes — save and login
 > 2. Edit — let me adjust
 > 3. Cancel
 
-If **2**, ask what to change and update accordingly.
-
-### 3d — Save config
+If **2**, ask what to change.
 
 Write `.auto-login.json` at the project root (same level as `.git`):
 
 ```json
 {
-  "login_url": "http://localhost:3000/fr/login",
-  "credentials": {
-    "file": "front/.env.local",
-    "email_var": "E2E_TEST_EMAIL",
-    "password_var": "E2E_TEST_PASSWORD"
+  "login": {
+    "url": "/fr/login",
+    "form_fields": null,
+    "credentials": {
+      "file": ".env.local",
+      "email_var": "E2E_TEST_EMAIL",
+      "password_var": "E2E_TEST_PASSWORD"
+    },
+    "success_indicator": {
+      "redirect_away_from": "/login"
+    }
   },
-  "browser": "playwright",
-  "form_fields": null,
-  "post_login": null,
-  "success_indicator": {
-    "redirect_away_from": "/login"
-  }
+  "companies": {}
 }
 ```
 
-Both `form_fields` and `post_login` are initially `null`. They get populated automatically after the first successful login (see Steps 5f and 6c).
+`form_fields` starts as `null` — populated after first successful login (Step 4f).
+`companies` starts empty — populated interactively (Step 5c).
 
-`form_fields` once filled looks like:
-
-```json
-"form_fields": {
-  "email_label": "Email",
-  "password_label": "Mot de passe",
-  "submit_label": "Se connecter"
-}
-```
-
-Also check if `.auto-login.json` is in `.gitignore`. If not, warn:
-
-> `.auto-login.json` is not in `.gitignore`. It may contain credential variable names. Add it?
-> 1. Yes
-> 2. No, I'll handle it
+**Do NOT add `.auto-login.json` to `.gitignore`** — this file is meant to be committed and shared with the team. It contains no secrets (only variable names, not values).
 
 ---
 
-## Step 4 — Validate existing config
+## Step 3 — Validate existing config
 
-When a config exists, verify:
+When config exists, verify before login:
 
-1. The credentials file still exists at the specified path
-2. The credential variables are still defined in that file
-3. The login URL port matches a running dev server (if detectable)
-4. If `form_fields` is present, note that form labels may change after app updates. If login fails (Step 5e), clear `form_fields` from the config and retry with fresh detection (go back to Step 5c without saved labels)
+1. The credentials file exists at the path specified in `login.credentials.file`
+2. The credential variables (`email_var`, `password_var`) are defined in that file
+3. Port is resolvable (see Step 4a)
 
-If anything is wrong:
+If `form_fields` is present, it will be validated during login (Step 4c). If labels don't match the snapshot, they're cleared and fresh detection is used.
 
-> Config issue: `front/.env.local` no longer contains `E2E_TEST_EMAIL`.
+If validation fails:
+
+> Config issue: `.env.local` no longer contains `E2E_TEST_EMAIL`.
 > 1. Re-discover (scan project again)
 > 2. Edit config manually
 > 3. Cancel
 
 ---
 
-## Step 5 — Login via browser MCP
+## Step 4 — Login via browser MCP
 
-### 5a — Read credentials
+### 4a — Resolve port and build login URL
+
+The port is NOT in `.auto-login.json` — it's dynamic per workspace. Resolve it in this order:
+
+1. Read `PORT` from the front repo's `.env.local`
+2. If in a workspace, check the workspace registry (`~/.claude-workspaces/registry.json`) for the front repo port
+3. Fall back to common defaults: 3000, 4000
+
+Build the full URL: `http://localhost:<port><login.url>`
+
+Example: `http://localhost:3040/fr/login`
+
+### 4b — Read credentials
 
 ```bash
 grep "^<email_var>=" <credentials_file> | cut -d= -f2-
 grep "^<password_var>=" <credentials_file> | cut -d= -f2-
 ```
 
-**NEVER display the password in your response.** Keep it in memory only long enough to fill the form.
+**NEVER display the password in your response.**
 
-### 5b — Navigate to login page
+### 4c — Navigate to login page
 
 **Playwright:**
 ```
-mcp__playwright__browser_navigate → url: <login_url>
+mcp__playwright__browser_navigate → url: <full_login_url>
 ```
 
 **Firefox:**
 ```
-mcp__firefox-devtools__navigate_page → url: <login_url>
+mcp__firefox-devtools__navigate_page → url: <full_login_url>
 ```
 
-### 5c — Snapshot and identify form
+### 4d — Snapshot and identify form
 
-**Playwright:**
-```
-mcp__playwright__browser_snapshot
-```
+Take a snapshot of the login page.
 
-**Firefox:**
-```
-mcp__firefox-devtools__take_snapshot
-```
-
-From the snapshot, identify the form fields:
-
-**If `form_fields` is present in the config**, use the saved labels to find the fields in the snapshot instead of guessing. Match by label text (e.g. find the textbox whose label matches `email_label`, the password input whose label matches `password_label`, and the button whose text matches `submit_label`). If the saved labels don't match any element in the snapshot, fall back to generic detection below.
+**If `login.form_fields` is set in the config**, use the saved labels to find fields by matching label text. If saved labels don't match, fall back to generic detection.
 
 **Generic detection (no `form_fields` or fallback)**:
-- Email/username input (look for: `email`, `e-mail`, `utilisateur`, `username`, `user`)
-- Password input (look for: `password`, `mot de passe`, `mdp`)
-- Submit button (look for: `login`, `connexion`, `se connecter`, `sign in`, `submit`, `entrer`)
+- Email input: look for labels/placeholders containing `email`, `e-mail`, `utilisateur`, `username`
+- Password input: look for `password`, `mot de passe`, `mdp`
+- Submit button: look for `login`, `connexion`, `se connecter`, `sign in`, `submit`
 
-### 5d — Fill and submit
+### 4e — Fill and submit
 
 **Playwright:**
 ```
@@ -208,88 +198,83 @@ mcp__firefox-devtools__fill_by_uid → password input uid + value
 mcp__firefox-devtools__click_by_uid → submit button uid
 ```
 
-### 5e — Verify success
+### 4f — Verify success
 
-Wait ~2 seconds, then check the current URL:
+Wait ~2 seconds, then take a snapshot. Check if the URL has changed away from the login page (based on `login.success_indicator.redirect_away_from`).
 
-**Playwright:**
-```
-mcp__playwright__browser_snapshot
-```
-
-**Firefox:**
-```
-mcp__firefox-devtools__take_snapshot
-```
-
-Check if the URL has changed away from the login page (based on `success_indicator.redirect_away_from`).
-
-- **Success**: display a short confirmation message:
-  > Auto-login OK. Browser is now on `<current_url>`.
-
-- **Failure**: take a screenshot and check for error messages in the snapshot:
-  > Login failed — `<error_message_if_found>`. Check your credentials.
-
-### 5f — Save form fields to config
-
-After a successful login, update `.auto-login.json` with the `form_fields` discovered during this session. Save the labels that were used to identify the email input, password input, and submit button:
-
-```json
-"form_fields": {
-  "email_label": "Email",
-  "password_label": "Mot de passe",
-  "submit_label": "Se connecter"
-}
-```
-
-This way, the next login skips the generic guessing step and directly matches fields by their saved labels. Only update if `form_fields` was previously `null` or if fresh detection was used (i.e., the saved labels had failed).
+- **Success** → save form labels if not already saved (update `login.form_fields` in `.auto-login.json`), then proceed to Step 5.
+- **Failure** → if `form_fields` was used, clear it and retry with generic detection. If still fails:
+  > Login failed — `<error_message>`. Check your credentials.
 
 ---
 
-## Step 6 — Post-login navigation (optional)
+## Step 5 — Post-login navigation
 
-If `post_login` is present in the config, perform additional navigation after a successful login.
+### 5a — Check for memorized flow
 
-### 6a — Company/org selection
+If a flow was found in `CLAUDE.local.md` (Step 1), parse it as `<company-key>/<feature-key>`.
 
-If `post_login.company_name` is set, take a snapshot of the current page and look for a company/organization selector or list. Click on the matching company name.
+Look up the company and feature in `.auto-login.json` → `companies.<company-key>.features.<feature-key>`.
 
-If no company selector is visible (the app may have auto-selected), skip this step.
+If found → navigate directly (Step 5b). No questions asked.
 
-### 6b — Navigate to feature page
+### 5b — Navigate using flow
 
-If `post_login.navigate_to` is set, navigate to that URL path (relative to the app's base URL).
+For each step in the feature's `path` array:
+1. Take a snapshot of the current page
+2. Find and click the menu item matching the label
+3. Wait for navigation
 
-### 6c — Config discovery
+After all steps, verify the URL contains the feature's `url` path.
 
-If `post_login` is NOT in the config, ask the user after the first successful login:
+> Auto-login OK. Browser is on `<current_url>`.
 
-> You're now logged in. Want me to navigate somewhere specific after login next time?
-> 1. Yes — select a company/page
+### 5c — First-time flow discovery (no memorized flow, companies exist)
+
+If `companies` is populated in the config but no flow is memorized, present a select:
+
+> Where do you want to go?
+
+List all companies and their features:
+
+> 1. Humann & Taconet > Dossiers d'escale
+> 2. Humann & Taconet > Comptes de décaissement
+> 3. Humann & Taconet > Situation fournisseurs
+> 4. Just the dashboard (no navigation)
+
+If the user picks a feature, navigate using Step 5b, then save the flow to `CLAUDE.local.md`:
+
+Add this line under `## Workspace info`:
+```
+- **Auto-login flow**: <company-key>/<feature-key>
+```
+
+### 5d — No companies in config
+
+If `companies` is empty and login succeeded:
+
+> You're logged in. Want me to learn the navigation to your feature?
+> 1. Yes — guide me through the app
 > 2. No — just the login is enough
 
 If **1**:
-- Take a snapshot to show what's on screen
-- Ask which company/org to select (if a selector is visible)
-- Ask which page to navigate to
-- Save to config:
+- Take a snapshot, show what's on screen
+- Ask what to click (or let the user navigate manually and take snapshots to record)
+- Record the company name, path (menu clicks), and final URL
+- Save to `.auto-login.json` under `companies`
+- Save the flow to `CLAUDE.local.md`
 
-```json
-"post_login": {
-  "company_name": "Polo",
-  "navigate_to": "/fr/dashboard/disbursements"
-}
-```
-
-If **2**, save `"post_login": null` to skip this question next time.
+If **2**, proceed without navigation.
 
 ---
 
 ## Rules
 
 - **Never display the password** in responses, tool output, or commit messages.
-- **Never commit `.auto-login.json`** or credential files.
+- **`.auto-login.json` IS meant to be committed** — it contains no secrets, only variable names and navigation flows.
+- **Never commit `.env.local`** or other credential files.
 - **Never add auto-login to CI or prod configs.** This is strictly for local dev.
 - **If the login form has changed** (captcha, 2FA, new field), do not brute-force. Abort and inform the user.
 - **One question at a time.** Never batch questions.
 - **Always validate config** before using it — files and variables may have changed.
+- **Port is always resolved dynamically** — never hardcode it in `.auto-login.json`.
