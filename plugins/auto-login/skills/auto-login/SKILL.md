@@ -104,13 +104,16 @@ Write `.auto-login.json` at the project root (same level as `.git`):
   },
   "browser": "playwright",
   "form_fields": null,
+  "post_login": null,
   "success_indicator": {
     "redirect_away_from": "/login"
   }
 }
 ```
 
-The `form_fields` key is initially `null`. It gets populated automatically after the first successful login (see Step 5f). Once filled, it looks like:
+Both `form_fields` and `post_login` are initially `null`. They get populated automatically after the first successful login (see Steps 5f and 6c).
+
+`form_fields` once filled looks like:
 
 ```json
 "form_fields": {
@@ -240,6 +243,45 @@ After a successful login, update `.auto-login.json` with the `form_fields` disco
 ```
 
 This way, the next login skips the generic guessing step and directly matches fields by their saved labels. Only update if `form_fields` was previously `null` or if fresh detection was used (i.e., the saved labels had failed).
+
+---
+
+## Step 6 — Post-login navigation (optional)
+
+If `post_login` is present in the config, perform additional navigation after a successful login.
+
+### 6a — Company/org selection
+
+If `post_login.company_name` is set, take a snapshot of the current page and look for a company/organization selector or list. Click on the matching company name.
+
+If no company selector is visible (the app may have auto-selected), skip this step.
+
+### 6b — Navigate to feature page
+
+If `post_login.navigate_to` is set, navigate to that URL path (relative to the app's base URL).
+
+### 6c — Config discovery
+
+If `post_login` is NOT in the config, ask the user after the first successful login:
+
+> You're now logged in. Want me to navigate somewhere specific after login next time?
+> 1. Yes — select a company/page
+> 2. No — just the login is enough
+
+If **1**:
+- Take a snapshot to show what's on screen
+- Ask which company/org to select (if a selector is visible)
+- Ask which page to navigate to
+- Save to config:
+
+```json
+"post_login": {
+  "company_name": "Polo",
+  "navigate_to": "/fr/dashboard/disbursements"
+}
+```
+
+If **2**, save `"post_login": null` to skip this question next time.
 
 ---
 
