@@ -143,7 +143,31 @@ Default is **NO**. Only proceed if the user explicitly answers `y` or `yes`. Any
 
 Execute each sub-step in order. If a step fails, log a warning and **continue** — do not abort the entire cleanup.
 
-### 5a — Kill processes on ports
+### 5a — Close WezTerm window (if terminal layout configured)
+
+If the project config has a `terminal` section, close the WezTerm window for this workspace:
+
+```bash
+osascript -e '
+  tell application "System Events"
+    if exists process "WezTerm" then
+      tell process "WezTerm"
+        repeat with w in windows
+          try
+            if (name of w) contains "[w<slot>]" then
+              click (first button of w whose subrole is "AXCloseButton")
+            end if
+          end try
+        end repeat
+      end tell
+    end if
+  end tell
+' 2>/dev/null
+```
+
+Log: `✓ Closed WezTerm window` or `- No WezTerm window found`.
+
+### 5b — Kill processes on ports
 
 For each port in the workspace:
 
@@ -159,7 +183,7 @@ fi
 
 Log: `✓ Killed process on port <port>` or `- Nothing on port <port>`.
 
-### 5b — Execute pre_destroy hook
+### 5c — Execute pre_destroy hook
 
 If a `pre_destroy` hook is defined in the project config (`.claude-workspaces.json`), run it with variable substitution:
 
@@ -172,11 +196,11 @@ If a `pre_destroy` hook is defined in the project config (`.claude-workspaces.js
 eval "<pre_destroy_command_with_substitutions>"
 ```
 
-### 5c — Execute db_destroy hook
+### 5d — Execute db_destroy hook
 
 If a `db_destroy` hook is defined in the project config, run it with the same variable substitution as above.
 
-### 5d — Remove git worktrees (worktree mode only)
+### 5e — Remove git worktrees (worktree mode only)
 
 For each repo in the workspace:
 
@@ -188,7 +212,7 @@ Where `<repo_origin>` is the relative origin path from `.claude-workspaces.json`
 
 Log: `✓ Removed worktree <repo_name>` or `⚠ Failed to remove worktree <repo_name>: <error>`.
 
-### 5e — Remove workspace directory
+### 5f — Remove workspace directory
 
 ```bash
 rm -rf <workspace_path>
@@ -196,7 +220,7 @@ rm -rf <workspace_path>
 
 Log: `✓ Removed directory <workspace_path>`.
 
-### 5f — Update registry
+### 5g — Update registry
 
 Read the registry, remove the entry for this slot, and write it back:
 
@@ -208,7 +232,7 @@ Remove the key matching this slot from `workspaces`. Recalculate `next_slot` as 
 
 Write the updated registry to `~/.claude-workspaces/registry.json`.
 
-### 5g — Reset terminal
+### 5h — Reset terminal
 
 Reset the terminal title and background color:
 

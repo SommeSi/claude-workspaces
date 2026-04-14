@@ -141,7 +141,11 @@ Write `<path>/.vscode/settings.json` with the workspace color. See `references/g
 
 Fill in the hex color for `titleBar.activeBackground`, `titleBar.activeForeground`, `statusBar.background`, `statusBar.foreground`.
 
-### 5c — Update registry
+### 5c — Generate .worktree-env.sh
+
+Write `<path>/.worktree-env.sh` with the workspace color, slot, branch, and emoji. See `references/generated-files.md` for the exact template. This file is auto-sourced by the user's shell hook on `cd` into the workspace directory.
+
+### 5d — Update registry
 
 Read the registry again (always re-read before writing to avoid races), add the new workspace entry, and update `next_slot`.
 
@@ -185,7 +189,7 @@ Write the updated registry to `~/.claude-workspaces/registry.json`. Create the d
 mkdir -p ~/.claude-workspaces
 ```
 
-### 5d — Color the terminal
+### 5e — Color the terminal
 
 Apply the workspace color to the current terminal session. See `references/color-palette.md` for OSC sequences.
 
@@ -215,10 +219,22 @@ Show a concise success message. For example:
 
 Your terminal and IDE are now colored for this workspace.
 
-Next steps:
-  • Use /workspace:resume to reattach color and context in future sessions
-  • Use /workspace:finish when you're done with this workspace
 ```
+
+Then ask the user with a select prompt:
+
+> Want me to launch a Claude Code session in the workspace?
+> 1. Yes — launch now
+> 2. No — just show me the command
+
+- **1** → run:
+  ```bash
+  claude --name "<slug> [w<slot>]" --cwd "<workspace_path>"
+  ```
+- **2** → display the command for the user to copy:
+  ```
+  cd <workspace_path> && claude --name "<slug> [w<slot>]"
+  ```
 
 ---
 

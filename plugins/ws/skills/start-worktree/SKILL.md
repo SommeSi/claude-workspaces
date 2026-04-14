@@ -213,6 +213,7 @@ See references/generated-files.md for the exact file contents and templates.
 
 - Write `<workspace_path>/CLAUDE.local.md` — fill in slot, branch, mode (`worktree`), creation date, repos list, user description, spec link.
 - Write `<workspace_path>/.vscode/settings.json` — fill in the hex color for title bar and status bar.
+- Write `<workspace_path>/.worktree-env.sh` — fill in slot, branch, color, emoji. This file is auto-sourced by the user's shell hook on `cd`. See references/generated-files.md for the template.
 - For each repo, write `<workspace_path>/<repo.name>/.env.local` — fill in port, slot, branch, color, emoji, plus any `env_template` entries from the config with variable substitution.
 
 Variable substitution applies to `env_template` values:
@@ -312,12 +313,35 @@ Show a concise success message. For example:
     back  →  /Users/you/workspaces/feat-polo-export-csv/back  (port 3030)
     front →  /Users/you/workspaces/feat-polo-export-csv/front (port 4030)
 
-Next steps:
-  • cd /Users/you/workspaces/feat-polo-export-csv/back
-  • Open a new Claude Code session in the workspace directory
-  • Use /workspace:resume to reattach later
-  • Use /workspace:finish when done with this workspace
 ```
+
+Then check if `.claude-workspaces.json` has a `terminal` section:
+
+- **If `terminal` is configured** → ask:
+  > Want me to open the dev layout? (WezTerm panes + servers + Claude tab)
+  > 1. Yes — open layout now (`/workspace:open`)
+  > 2. No — just show me the command
+
+  If **1**, execute the `/workspace:open` skill flow (Steps 2-5 from the open skill, skipping Step 1 since we already know the workspace).
+
+  If **2**, display:
+  ```
+  cd <workspace_path> && claude --name "<branch> [w<slot>]"
+  ```
+
+- **If no `terminal` section** → ask:
+  > Want me to launch a Claude Code session in the workspace?
+  > 1. Yes — launch now
+  > 2. No — just show me the command
+
+  - **1** → run:
+    ```bash
+    claude --name "<branch> [w<slot>]" --cwd "<workspace_path>"
+    ```
+  - **2** → display the command for the user to copy:
+    ```
+    cd <workspace_path> && claude --name "<branch> [w<slot>]"
+    ```
 
 ---
 
