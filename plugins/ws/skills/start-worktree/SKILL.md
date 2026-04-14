@@ -108,17 +108,23 @@ Also check if `.claude-workspaces.local.json` is in `.gitignore`. If not, sugges
 
 Ask each question separately, waiting for the user's answer before asking the next.
 
-### 3a — Branch name
-
-Ask: **What branch name should this workspace use?**
-
-- Validate against conventional format: `feat/`, `fix/`, `chore/`, `refactor/`, `docs/`, `test/`, `style/`, `perf/`
-- If the name doesn't match, **suggest a corrected version** (e.g. `feat/my-thing`) but accept the user's choice if they insist.
-- Example valid names: `feat/polo/export-csv`, `fix/login-redirect`, `chore/update-deps`
-
-### 3b — Description
+### 3a — Description
 
 Ask: **Briefly describe the goal of this workspace** (2–3 sentences). This will be written to `CLAUDE.local.md` to give future Claude sessions context.
+
+### 3b — Branch name
+
+Based on the user's description, **propose a branch name** following conventional format: `feat/`, `fix/`, `chore/`, `refactor/`, `docs/`, `test/`, `style/`, `perf/`.
+
+Example: if the user says "ajouter l'export CSV pour Polo", propose `feat/polo/export-csv`.
+
+Present it as a select:
+
+> Branch name suggestion:
+> 1. `feat/polo/export-csv`
+> 2. I want a different name
+
+If **2**, let the user type their own name.
 
 ### 3c — Spec link
 
