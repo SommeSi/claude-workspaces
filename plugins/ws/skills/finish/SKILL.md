@@ -73,19 +73,45 @@ This check is **informational only** — it does not block the cleanup.
 
 ---
 
-## Step 3 — Capture lessons learned (MANDATORY question)
+## Step 3 — Capture lessons learned (MANDATORY)
 
-Before any cleanup, ask:
+Before any cleanup, do two things:
 
-> Before cleanup: did you learn anything **surprising or non-obvious** during this workspace that should be remembered for future sessions?
+### 3a — Claude's own learnings
+
+Review the entire conversation history and identify things **you** learned that are worth remembering for future sessions. Look for:
+
+- **feedback**: corrections the user made to your approach, preferences expressed, things that worked well
+- **project**: architectural decisions, constraints, deadlines, stakeholder context
+- **reference**: external tools, dashboards, docs, APIs discovered during the session
+- **user**: new info about the user's role, expertise, or preferences
+
+Present your findings as a numbered list:
+
+> Here's what I picked up during this session:
+> 1. [feedback] ...
+> 2. [project] ...
+> 3. [reference] ...
 >
-> Examples: tricky API behavior, undocumented convention, pattern that worked well, important architectural decision.
+> Want me to save any of these? (all / pick numbers / none)
+
+Wait for the user's answer. Save the selected items.
+
+### 3b — User's own learnings
+
+Then ask:
+
+> And you — did you learn anything **surprising or non-obvious** that should be remembered for future sessions?
+>
+> Examples: tricky API behavior, undocumented convention, pattern that worked well, important decision.
 >
 > Answer freely, or say "no" to skip.
 
-Wait for the user's answer. Do NOT proceed until answered.
+Wait for the user's answer.
 
-### If the user has something to share:
+### Saving memories
+
+For each item to save (from 3a or 3b):
 
 1. Determine the appropriate memory type: `feedback`, `project`, `reference`, or `user`.
 2. Draft a memory file with proper frontmatter:
@@ -100,10 +126,6 @@ Wait for the user's answer. Do NOT proceed until answered.
 3. Show the draft to the user and ask for confirmation before saving.
 4. Save to the Claude memory directory (same location as `MEMORY.md`).
 5. Update `MEMORY.md` to add an entry in the index.
-
-### If the user says "no":
-
-Proceed to Step 4.
 
 ---
 
