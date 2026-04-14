@@ -12,7 +12,21 @@ claude plugins marketplace add SommeSi/claude-workspaces
 claude plugins install workspace
 ```
 
-After installation, restart Claude Code. You'll have access to these skills:
+After installation, restart Claude Code.
+
+### Shell hook (recommended)
+
+Auto-color your terminal when you `cd` into a workspace:
+
+```bash
+bash ~/.claude/plugins/cache/claude-workspaces/workspace/*/scripts/setup-shell.sh
+```
+
+This adds a hook to your `.zshrc` or `.bashrc` that colors the terminal background and sets the tab title on `cd` into any workspace. Safe to run multiple times.
+
+### Skills
+
+You'll have access to these skills:
 
 | Skill | Description |
 |-------|-------------|
@@ -21,6 +35,7 @@ After installation, restart Claude Code. You'll have access to these skills:
 | `/workspace:list` | List all active workspaces with status |
 | `/workspace:resume` | Load workspace context and color terminal |
 | `/workspace:attach` | Attach a workspace to an existing directory (no worktree, no new dir) |
+| `/workspace:open` | Open the dev layout — WezTerm panes, dev servers, Claude tab |
 | `/workspace:finish` | Finalize workspace — safety checks, cleanup |
 
 ## What is a workspace?
