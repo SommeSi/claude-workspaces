@@ -238,6 +238,12 @@ git -C "$origin_abs" worktree add --track -b "<branch>" "$worktree_path" "origin
 
 Check the output of the first command. If it fails because the branch already exists, fall back to the second or third form accordingly.
 
+After creating the worktree, pull the latest changes from the base branch to ensure the worktree starts up to date:
+
+```bash
+git -C "$worktree_path" pull origin develop 2>/dev/null || git -C "$worktree_path" pull origin main 2>/dev/null || true
+```
+
 ### 6c — Generate workspace files
 
 See references/generated-files.md for the exact file contents and templates.
