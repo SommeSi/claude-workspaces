@@ -107,7 +107,17 @@ case "$(uname -s)" in
     fi
     ;;
   Linux)
-    if command -v notify-send &>/dev/null; then
+    if grep -qi microsoft /proc/version 2>/dev/null; then
+      # WSL — use PowerShell to send Windows toast notification
+      powershell.exe -NoProfile -Command "
+        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+        [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null
+        \$xml = [Windows.Data.Xml.Dom.XmlDocument]::new()
+        \$xml.LoadXml('<toast><visual><binding template=\"ToastText02\"><text id=\"1\">$TITLE</text><text id=\"2\">$MESSAGE</text></binding></visual><audio src=\"ms-winsoundevent:Notification.Default\"/></toast>')
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Claude Code').Show([Windows.UI.Notifications.ToastNotification]::new(\$xml))
+      " 2>/dev/null || true
+    elif command -v notify-send &>/dev/null; then
+      # Native Linux
       notify-send "$TITLE" "$MESSAGE" 2>/dev/null || true
     fi
     ;;
