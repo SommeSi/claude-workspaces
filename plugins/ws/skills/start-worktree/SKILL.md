@@ -34,7 +34,20 @@ cat <git-root>/.claude-workspaces.json 2>/dev/null
 
 ### If config exists
 
-Parse it and continue to Step 3.
+Parse it. Then check for a local override file:
+
+```bash
+cat <git-root>/.claude-workspaces.local.json 2>/dev/null
+```
+
+If a local file exists, **merge** it into the main config:
+- `repos` in the local file are matched by `name` — any field present in the local entry overrides the shared entry (typically `origin`).
+- Top-level fields (`workspaces_root`, `port_step`, `hooks`, `terminal`) in the local file override the shared ones.
+- Repos defined only in the shared config keep their values unchanged.
+
+After merging, check that every repo has an `origin` field. If any repo is missing `origin` (defined in shared config without it, and no local override), **ask the user** for the path and offer to save it to `.claude-workspaces.local.json`.
+
+Continue to Step 3.
 
 ### If config does NOT exist
 
@@ -43,8 +56,8 @@ Guide the user through creating one, **one question at a time**:
 1. **How many repositories does this project use?** (Enter 1 for a single repo, or a number for a monorepo / multi-repo setup.)
 2. For **each repo**, ask:
    - **Name** for this repo (e.g. `back`, `front`, `app`)
-   - **Relative path** from the git root to this repo's directory (e.g. `.` for root, `packages/api` for a sub-directory)
    - **Port base** — the starting port number for this repo (e.g. `3000`)
+   - **Is this the current repo?** If yes, `origin` is `"."`. If no, ask for the relative path — but explain this will go in the **local** config file since paths differ per developer.
 3. **Where should workspaces be created?** (default: `~/workspaces`)
 4. **Port step** — how many ports to skip between slots? (default: `10`)
 5. **Any setup hooks?** (all optional — press Enter to skip each):
@@ -52,30 +65,42 @@ Guide the user through creating one, **one question at a time**:
    - `db_create` — sets up a database for this workspace
    - `db_destroy` — tears down the database when the workspace is removed
 
-After collecting answers, generate the JSON config and **show it to the user**. Ask for explicit confirmation before writing.
+After collecting answers, generate **two JSON files** and show them to the user. Ask for explicit confirmation before writing.
 
-Example config structure:
+**Shared config** (`.claude-workspaces.json` — committed to git):
 
 ```json
 {
   "workspaces_root": "~/workspaces",
   "port_step": 10,
   "repos": [
-    {
-      "name": "back",
-      "origin": "./back",
-      "port_base": 3000
-    }
+    { "name": "back", "origin": ".", "port_base": 3001 },
+    { "name": "front", "port_base": 3000 }
   ],
   "hooks": {
-    "post_create": "cd $WORKSPACE_PATH/<repo-name> && bundle install",
+    "post_create": "cd $WORKSPACE_PATH/back && bundle install",
     "db_create": null,
     "db_destroy": null
   }
 }
 ```
 
-Write the confirmed config to `<git-root>/.claude-workspaces.json`.
+Note: repos whose `origin` is `"."` (the current repo) include it in the shared config. External repos omit `origin` — each developer provides their own path in the local file.
+
+**Local config** (`.claude-workspaces.local.json` — gitignored, per-developer):
+
+```json
+{
+  "repos": {
+    "front": { "origin": "../frontend-app" }
+  }
+}
+```
+
+Write the shared config to `<git-root>/.claude-workspaces.json`.
+Write the local config to `<git-root>/.claude-workspaces.local.json`.
+
+Also check if `.claude-workspaces.local.json` is in `.gitignore`. If not, suggest adding it.
 
 ---
 

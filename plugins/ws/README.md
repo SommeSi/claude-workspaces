@@ -42,24 +42,37 @@ Safe to run multiple times — skips if already installed. Supports zsh and bash
 
 ### Project config (optional)
 
-Create `.claude-workspaces.json` at your project root:
+Create `.claude-workspaces.json` at your project root (committed to git):
 
 ```json
 {
   "repos": [
-    { "name": "app", "origin": ".", "port_base": 3000 }
+    { "name": "back", "origin": ".", "port_base": 3001 },
+    { "name": "front", "port_base": 3000 }
   ],
   "port_step": 10,
   "workspaces_root": "~/workspaces",
   "hooks": {
-    "post_create": "bin/setup $SLOT",
+    "post_create": "cd $WORKSPACE_PATH/back && bundle install",
     "db_create": "bin/db-create $SLOT",
     "db_destroy": "bin/db-drop $SLOT"
   }
 }
 ```
 
-If no config exists, `/workspace:start-worktree` will guide you through creating one.
+For multi-repo projects, external repos (repos outside the current git root) should **omit `origin`** in the shared config. Each developer provides their own paths in `.claude-workspaces.local.json` (gitignored):
+
+```json
+{
+  "repos": {
+    "front": { "origin": "../frontend-app" }
+  }
+}
+```
+
+The local file merges into the shared config — repos are matched by `name`, and any field in the local entry overrides the shared one. If a repo is missing `origin`, the plugin will ask for it interactively.
+
+If no config exists, `/workspace:start-worktree` will guide you through creating both files.
 
 ### Terminal layout (optional, WezTerm)
 
