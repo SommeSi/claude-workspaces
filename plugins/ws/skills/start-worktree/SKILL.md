@@ -249,7 +249,8 @@ git -C "$worktree_path" pull origin develop 2>/dev/null || git -C "$worktree_pat
 See references/generated-files.md for the exact file contents and templates.
 
 - Write `<workspace_path>/CLAUDE.local.md` — fill in slot, branch, mode (`worktree`), creation date, repos list, user description, spec link.
-- Write `<workspace_path>/.vscode/settings.json` — fill in the hex color for title bar and status bar.
+- For each repo, write or merge `<workspace_path>/<repo.name>/.vscode/settings.json` — add `workbench.colorCustomizations` with the workspace color. If the file already exists, merge the color key without overwriting other settings.
+- If multi-repo (2+ repos), write `<workspace_path>/<slug>.code-workspace` — VS Code workspace file listing all repos with workspace color. See references/generated-files.md.
 - Write `<workspace_path>/.worktree-env.sh` — fill in slot, branch, color, emoji. This file is auto-sourced by the user's shell hook on `cd`. See references/generated-files.md for the template.
 - For each repo, generate `<workspace_path>/<repo.name>/.env.local`:
   1. Look for an existing `.env.local` in the origin repo directory. Also check the **git root** of the project (the origin may be a subdirectory). Copy it as the base if found.

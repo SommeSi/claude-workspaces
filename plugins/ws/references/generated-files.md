@@ -31,7 +31,9 @@ This helps the user know which workspace this Claude session is attached to.
 
 ````
 
-## .vscode/settings.json (at workspace root)
+## .vscode/settings.json (at workspace root AND each repo)
+
+For **each repo** in the workspace, write or merge `.vscode/settings.json` with the workspace color. If the file already exists (e.g. with ESLint settings), merge the `workbench.colorCustomizations` key into it — do not overwrite other settings.
 
 ```json
 {
@@ -40,6 +42,27 @@ This helps the user know which workspace this Claude session is attached to.
     "titleBar.activeForeground": "#ffffff",
     "statusBar.background": "<color>",
     "statusBar.foreground": "#ffffff"
+  }
+}
+```
+
+## .code-workspace (at workspace root, multi-repo only)
+
+For multi-repo workspaces (2+ repos), generate a VS Code workspace file at `<workspace_path>/<slug>.code-workspace`:
+
+```json
+{
+  "folders": [
+    { "path": "<repo1.name>", "name": "<emoji> <repo1.name>" },
+    { "path": "<repo2.name>", "name": "<emoji> <repo2.name>" }
+  ],
+  "settings": {
+    "workbench.colorCustomizations": {
+      "titleBar.activeBackground": "<color>",
+      "titleBar.activeForeground": "#ffffff",
+      "statusBar.background": "<color>",
+      "statusBar.foreground": "#ffffff"
+    }
   }
 }
 ```
