@@ -1,0 +1,11 @@
+{
+  "name": "auto-login",
+  "version": "0.1.0",
+  "description": "Auto-login to local dev apps via browser MCP — discovers login forms from source code, persists config, supports Playwright and Firefox",
+  "author": {
+    "name": "sommesi"
+  },
+  "repository": "https://github.com/sommesi/claude-workspaces",
+  "license": "MIT",
+  "keywords": ["auto-login", "browser", "mcp", "playwright", "firefox", "dev"]
+}
