@@ -245,7 +245,11 @@ See references/generated-files.md for the exact file contents and templates.
 - Write `<workspace_path>/CLAUDE.local.md` — fill in slot, branch, mode (`worktree`), creation date, repos list, user description, spec link.
 - Write `<workspace_path>/.vscode/settings.json` — fill in the hex color for title bar and status bar.
 - Write `<workspace_path>/.worktree-env.sh` — fill in slot, branch, color, emoji. This file is auto-sourced by the user's shell hook on `cd`. See references/generated-files.md for the template.
-- For each repo, write `<workspace_path>/<repo.name>/.env.local` — fill in port, slot, branch, color, emoji, plus any `env_template` entries from the config with variable substitution.
+- For each repo, generate `<workspace_path>/<repo.name>/.env.local`:
+  1. Look for an existing `.env.local` in the origin repo directory. Also check the **git root** of the project (the origin may be a subdirectory). Copy it as the base if found.
+  2. Also copy `.env.test`, `.env.development`, and any other `.env.*` files (except `.env.production`) from the same locations — these often contain secrets needed for dev.
+  3. Then **append or override** the workspace variables (PORT, WS_SLOT, WS_BRANCH, WS_COLOR, WS_EMOJI) and any `env_template` entries in the `.env.local`.
+  4. If a variable already exists in the base file, replace its value instead of duplicating the line.
 
 Variable substitution applies to `env_template` values:
 - `$SLOT` → slot number
@@ -267,7 +271,10 @@ Before running each hook command, perform variable substitution:
 - `$WORKSPACE_PATH` → workspace root path (with `~` expanded to `$HOME`)
 
 ```bash
-# Example: evaluate the hook string with substituted vars
+# Source the user's shell profile to get full PATH (bun, nvm, rbenv, etc.)
+source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
+
+# Evaluate the hook string with substituted vars
 eval "<hook_command_with_substitutions>"
 ```
 
