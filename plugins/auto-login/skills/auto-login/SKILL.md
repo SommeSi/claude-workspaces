@@ -103,9 +103,20 @@ Write `.auto-login.json` at the project root (same level as `.git`):
     "password_var": "E2E_TEST_PASSWORD"
   },
   "browser": "playwright",
+  "form_fields": null,
   "success_indicator": {
     "redirect_away_from": "/login"
   }
+}
+```
+
+The `form_fields` key is initially `null`. It gets populated automatically after the first successful login (see Step 5f). Once filled, it looks like:
+
+```json
+"form_fields": {
+  "email_label": "Email",
+  "password_label": "Mot de passe",
+  "submit_label": "Se connecter"
 }
 ```
 
@@ -124,6 +135,7 @@ When a config exists, verify:
 1. The credentials file still exists at the specified path
 2. The credential variables are still defined in that file
 3. The login URL port matches a running dev server (if detectable)
+4. If `form_fields` is present, note that form labels may change after app updates. If login fails (Step 5e), clear `form_fields` from the config and retry with fresh detection (go back to Step 5c without saved labels)
 
 If anything is wrong:
 
@@ -169,7 +181,11 @@ mcp__playwright__browser_snapshot
 mcp__firefox-devtools__take_snapshot
 ```
 
-From the snapshot, identify:
+From the snapshot, identify the form fields:
+
+**If `form_fields` is present in the config**, use the saved labels to find the fields in the snapshot instead of guessing. Match by label text (e.g. find the textbox whose label matches `email_label`, the password input whose label matches `password_label`, and the button whose text matches `submit_label`). If the saved labels don't match any element in the snapshot, fall back to generic detection below.
+
+**Generic detection (no `form_fields` or fallback)**:
 - Email/username input (look for: `email`, `e-mail`, `utilisateur`, `username`, `user`)
 - Password input (look for: `password`, `mot de passe`, `mdp`)
 - Submit button (look for: `login`, `connexion`, `se connecter`, `sign in`, `submit`, `entrer`)
@@ -210,6 +226,20 @@ Check if the URL has changed away from the login page (based on `success_indicat
 
 - **Failure**: take a screenshot and check for error messages in the snapshot:
   > Login failed — `<error_message_if_found>`. Check your credentials.
+
+### 5f — Save form fields to config
+
+After a successful login, update `.auto-login.json` with the `form_fields` discovered during this session. Save the labels that were used to identify the email input, password input, and submit button:
+
+```json
+"form_fields": {
+  "email_label": "Email",
+  "password_label": "Mot de passe",
+  "submit_label": "Se connecter"
+}
+```
+
+This way, the next login skips the generic guessing step and directly matches fields by their saved labels. Only update if `form_fields` was previously `null` or if fresh detection was used (i.e., the saved labels had failed).
 
 ---
 

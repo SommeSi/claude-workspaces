@@ -1,6 +1,6 @@
 {
   "name": "auto-login",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Auto-login to local dev apps via browser MCP — discovers login forms from source code, persists config, supports Playwright and Firefox",
   "author": {
     "name": "sommesi"
