@@ -268,17 +268,59 @@ printf '\033]1;\007' > "$TTY_DEV" 2>/dev/null
 printf '\033]0;\007' > "$TTY_DEV" 2>/dev/null
 ```
 
+### 5i — Close workspace window
+
+Close the WezTerm window associated with this workspace. Find it by matching the workspace path in the pane list:
+
+```bash
+WEZTERM_CLI="/Applications/WezTerm.app/Contents/MacOS/wezterm"
+if [ -x "$WEZTERM_CLI" ]; then
+  # Find all panes whose cwd starts with the workspace path
+  $WEZTERM_CLI cli list --format json | python3 -c "
+import json, sys
+panes = json.load(sys.stdin)
+ws_path = '<workspace_path>'
+window_ids = set()
+for p in panes:
+    cwd = p.get('cwd', '')
+    if cwd.startswith(ws_path):
+        window_ids.add(p['window_id'])
+for wid in window_ids:
+    print(wid)
+" | while read wid; do
+    # Kill all panes in that window
+    $WEZTERM_CLI cli list --format json | python3 -c "
+import json, sys
+panes = json.load(sys.stdin)
+for p in panes:
+    if str(p['window_id']) == '$wid':
+        print(p['pane_id'])
+" | while read pid; do
+      $WEZTERM_CLI cli kill-pane --pane-id "$pid" 2>/dev/null || true
+    done
+  done
+fi
+```
+
+If WezTerm is not installed, skip this step silently.
+
+After closing the window, exit the current Claude Code session:
+
+```bash
+exit
+```
+
 ---
 
 ## Step 6 — Summary
 
-Show a concise success message:
+Show a concise success message, then exit:
 
 ```
 ✅ Workspace w<slot> (<slug>) removed. Slot freed.
 <if memory saved> 💾 Memory "<name>" saved.
 
-You can: /workspace:list, /workspace:start-worktree, /workspace:start-sandbox
+Closing session...
 ```
 
 ---
