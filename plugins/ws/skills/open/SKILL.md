@@ -106,100 +106,49 @@ Wait for the user's response. Accept: `y`, `yes`, `o`, `oui`, or empty (just Ent
 
 ## Step 4 — Create the layout
 
-See `references/terminal-layout.md` for the full WezTerm implementation details.
+**IMPORTANT: Execute ALL WezTerm commands in a SINGLE Bash call.** Do not split into multiple Bash calls — each call has latency from Claude Code. One script = instant layout.
 
-Execute the following in order. Run each bash command and check for errors.
-
-### 4a — Resolve paths
-
-For each pane in `terminal.panes`, resolve the absolute `cwd`:
-
+Resolve paths first:
 - `"."` → `<workspace_path>`
 - `"back"` → `<workspace_path>/back`
 - `"front"` → `<workspace_path>/front`
-- etc.
 
-### 4b — Detect WezTerm CLI path
+Then run **everything** in one bash block:
 
 ```bash
+# Detect WezTerm CLI
 if [[ -x "/Applications/WezTerm.app/Contents/MacOS/wezterm" ]]; then
-  WEZTERM_CLI="/Applications/WezTerm.app/Contents/MacOS/wezterm"
+  W="/Applications/WezTerm.app/Contents/MacOS/wezterm"
 else
-  WEZTERM_CLI="$(which wezterm 2>/dev/null)"
+  W="$(which wezterm 2>/dev/null)"
 fi
-echo "$WEZTERM_CLI"
-```
 
-### 4c — Spawn the window and panes
-
-Create a new WezTerm window with the first pane (top-left), then split to create the 2x2 grid:
-
-```bash
-# Top-left pane (new window)
-TL=$($WEZTERM_CLI cli spawn --new-window --cwd "<tl_cwd>")
-
-# Get window ID
-WINDOW_ID=$($WEZTERM_CLI cli list --format json | python3 -c "
+# --- Create window + panes ---
+TL=$($W cli spawn --new-window --cwd "<tl_cwd>")
+WINDOW_ID=$($W cli list --format json | python3 -c "
 import json, sys
 entries = json.load(sys.stdin)
 match = [e for e in entries if str(e['pane_id']) == '$TL']
 print(match[0]['window_id'] if match else '')
 ")
+TR=$($W cli split-pane --pane-id $TL --right --percent 50 --cwd "<tr_cwd>")
+BL=$($W cli split-pane --pane-id $TL --bottom --percent 50 --cwd "<bl_cwd>")
+BR=$($W cli split-pane --pane-id $TR --bottom --percent 50 --cwd "<br_cwd>")
 
-# Top-right
-TR=$($WEZTERM_CLI cli split-pane --pane-id $TL --right --percent 50 --cwd "<tr_cwd>")
+# --- Send commands (apply variable substitution) ---
+$W cli send-text --pane-id $TL --no-paste "clear && <tl_cmd>\n"
+$W cli send-text --pane-id $TR --no-paste "clear && <tr_cmd>\n"
+$W cli send-text --pane-id $BL --no-paste "clear\n"
+$W cli send-text --pane-id $BR --no-paste "clear && <br_cmd>\n"
 
-# Bottom-left
-BL=$($WEZTERM_CLI cli split-pane --pane-id $TL --bottom --percent 50 --cwd "<bl_cwd>")
-
-# Bottom-right
-BR=$($WEZTERM_CLI cli split-pane --pane-id $TR --bottom --percent 50 --cwd "<br_cwd>")
-```
-
-### 4d — Send commands
-
-For each pane, if `cmd` is not null, send the command. Apply variable substitution first (see `references/terminal-layout.md`).
-
-```bash
-$WEZTERM_CLI cli send-text --pane-id $TL --no-paste "clear && <tl_cmd>\n"
-$WEZTERM_CLI cli send-text --pane-id $TR --no-paste "clear && <tr_cmd>\n"
-$WEZTERM_CLI cli send-text --pane-id $BL --no-paste "clear\n"
-$WEZTERM_CLI cli send-text --pane-id $BR --no-paste "clear && <br_cmd>\n"
-```
-
-For panes with `cmd: null`, just send `clear`:
-
-```bash
-$WEZTERM_CLI cli send-text --pane-id $BL --no-paste "clear\n"
-```
-
-### 4e — Claude tab (if enabled)
-
-If `terminal.claude_tab` is `true` (default):
-
-```bash
-CLAUDE_PANE=$($WEZTERM_CLI cli spawn --window-id $WINDOW_ID --cwd "<workspace_path>")
-```
-
-Wait a moment, then launch Claude:
-
-```bash
+# --- Claude tab (if terminal.claude_tab is true) ---
+CLAUDE_PANE=$($W cli spawn --window-id $WINDOW_ID --cwd "<workspace_path>")
 sleep 1
-$WEZTERM_CLI cli send-text --pane-id $CLAUDE_PANE --no-paste "clear && claude --name \"<branch> [w<slot>]\"\n"
-```
-
-Wait for Claude to boot, then send initial context prompt:
-
-```bash
+$W cli send-text --pane-id $CLAUDE_PANE --no-paste "clear && claude --name \"<branch> [w<slot>]\"\n"
 sleep 3
-$WEZTERM_CLI cli send-text --pane-id $CLAUDE_PANE --no-paste "Lis CLAUDE.local.md et resume le contexte de ce workspace.\n"
-```
+$W cli send-text --pane-id $CLAUDE_PANE --no-paste "/workspace:resume\n"
 
-### 4f — Fullscreen (if enabled, macOS only)
-
-If `terminal.fullscreen` is `true` (default) and we're on macOS:
-
-```bash
+# --- Fullscreen (if terminal.fullscreen is true, macOS only) ---
 sleep 0.5
 osascript -e '
   tell application "WezTerm" to activate
@@ -209,8 +158,12 @@ osascript -e '
       set value of attribute "AXFullScreen" of window 1 to true
     end tell
   end tell
-'
+' 2>/dev/null || true
+
+echo "Layout created: window=$WINDOW_ID panes=TL=$TL TR=$TR BL=$BL BR=$BR claude=$CLAUDE_PANE"
 ```
+
+For panes with `cmd: null`, send just `clear\n`. Omit the Claude tab block if `terminal.claude_tab` is `false`. Omit the fullscreen block if `terminal.fullscreen` is `false`. Adapt the grid if fewer than 4 panes (e.g. 2 panes = vertical split only).
 
 ---
 
