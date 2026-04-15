@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh\" 'Notification'",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh\" 'Notification'",
             "timeout": 5
           }
         ]
