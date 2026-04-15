@@ -361,33 +361,13 @@ Show a concise success message. For example:
 
 ```
 
-Then check if `.claude-workspaces.json` has a `terminal` section:
+Then ask:
 
-- **If `terminal` is configured** → ask:
-  > Want me to open the dev layout? (WezTerm panes + servers + Claude tab)
-  > 1. Yes — open layout now (`/workspace:open`)
-  > 2. No — just show me the command
+> Want me to open the dev layout? (`/workspace:open`)
+> 1. Yes — open now
+> 2. No
 
-  If **1**, execute the `/workspace:open` skill flow (Steps 2-5 from the open skill, skipping Step 1 since we already know the workspace).
-
-  If **2**, display:
-  ```
-  cd <workspace_path> && claude --name "<branch> [w<slot>]"
-  ```
-
-- **If no `terminal` section** → ask:
-  > Want me to launch a Claude Code session in the workspace?
-  > 1. Yes — launch now
-  > 2. No — just show me the command
-
-  - **1** → run:
-    ```bash
-    claude --name "<branch> [w<slot>]" --cwd "<workspace_path>"
-    ```
-  - **2** → display the command for the user to copy:
-    ```
-    cd <workspace_path> && claude --name "<branch> [w<slot>]"
-    ```
+If **1**, execute the `/workspace:open` skill (skipping Step 1 since we already know the workspace).
 
 ---
 

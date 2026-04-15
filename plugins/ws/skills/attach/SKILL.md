@@ -221,20 +221,13 @@ Your terminal and IDE are now colored for this workspace.
 
 ```
 
-Then ask the user with a select prompt:
+Then ask:
 
-> Want me to launch a Claude Code session in the workspace?
-> 1. Yes — launch now
-> 2. No — just show me the command
+> Want me to open the dev layout? (`/workspace:open`)
+> 1. Yes — open now
+> 2. No
 
-- **1** → run:
-  ```bash
-  claude --name "<slug> [w<slot>]" --cwd "<workspace_path>"
-  ```
-- **2** → display the command for the user to copy:
-  ```
-  cd <workspace_path> && claude --name "<slug> [w<slot>]"
-  ```
+If **1**, execute the `/workspace:open` skill (skipping Step 1 since we already know the workspace).
 
 ---
 
