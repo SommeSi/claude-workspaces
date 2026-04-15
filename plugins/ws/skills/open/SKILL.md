@@ -41,15 +41,18 @@ If no config exists, or if the config has no `terminal` section, tell the user:
 
 And stop.
 
-### 1d — Validate terminal type
+### 1d — Choose launch mode
 
-Check `terminal.type` in the config. Currently only `"wezterm"` is supported.
+Ask the user with a select:
 
-If the type is not `"wezterm"`, tell the user:
+> How do you want to launch the servers?
+> 1. WezTerm — separate terminal panes (requires WezTerm)
+> 2. Background — launch servers as background processes in this Claude session
 
-> Terminal type `<type>` is not supported yet. Only `wezterm` is currently available.
+If **1** → continue to Step 2 (WezTerm flow).
+If **2** → skip to Step 6 (Background flow).
 
-And stop.
+If the config has a `terminal` section with `type: "wezterm"`, show option 1 first. If no `terminal` section, only show option 2.
 
 ---
 
@@ -230,11 +233,77 @@ osascript -e '
 
 ---
 
+## Step 6 — Background mode (alternative to WezTerm)
+
+Launch servers as background processes in the current Claude session. No WezTerm required.
+
+### 6a — Detect servers to launch
+
+Read the config to find what commands to run. If a `terminal` section exists, use the `panes` commands. Otherwise, detect from the project:
+
+- **Rails**: look for `bin/dev`, `bin/rails server`, or `Procfile` in back repo
+- **Next.js**: look for `bun run dev`, `npm run dev` in front repo
+- **Generic**: check `package.json` scripts for a `dev` command
+
+### 6b — Recap and confirm
+
+```
+Ready to launch servers in background:
+
+  🩵 [w5] feat/ai-studio
+
+  Servers:
+    back  → bin/dev (port 3051)
+    front → bun run dev --port 3050
+
+Launch? [Y/n]
+```
+
+### 6c — Launch servers
+
+For each server, use the Bash tool with `run_in_background: true`:
+
+```bash
+# Source shell profile for PATH (bun, nvm, rbenv)
+source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
+
+cd <workspace_path>/<repo_name> && <command>
+```
+
+Apply variable substitution:
+- `$PORT` → repo port
+- `$SLOT` → workspace slot
+- `$BRANCH` → branch name
+
+### 6d — Verify servers started
+
+Wait a few seconds, then check if the ports are responding:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:<port> 2>/dev/null || echo "not ready"
+```
+
+Report status for each server.
+
+### 6e — Summary
+
+```
+✓ Servers launched in background!
+
+  🩵 [w5] feat/ai-studio
+
+  back  → running on port 3051
+  front → running on port 3050
+
+Note: servers will stop when this Claude session ends.
+```
+
+---
+
 ## Rules
 
-- **Always check for WezTerm CLI** before attempting any layout operation.
 - **Always confirm before launching.** Show the recap and wait for approval.
-- **If any pane creation fails, stop and display the error.** Don't leave partial layouts.
-- **Only `wezterm` is supported.** Other terminal types should be rejected gracefully with a helpful message.
-- **Variable substitution** in pane commands follows the same rules as hook commands.
-- **Fewer than 4 panes is fine.** If only 2 panes are defined, create a vertical split instead of a 2x2 grid.
+- **If any server fails to start, display the error.** Don't leave partial state.
+- **Variable substitution** in commands follows the same rules as hook commands.
+- **WezTerm mode**: check for WezTerm CLI before attempting layout. Fewer than 4 panes is fine — adapt the grid.
+- **Background mode**: warn that servers stop when the Claude session ends.
