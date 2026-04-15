@@ -320,7 +320,7 @@ New entry structure:
 }
 ```
 
-Write the updated registry to `~/.claude-workspaces/registry.json`. Create the directory if needed:
+Write the updated registry to `~/.claude-workspaces/registry.json`. **Use atomic write to prevent corruption** (see references/registry-format.md). Always re-read the registry before writing. Write the full JSON in a single operation. Create the directory if needed:
 
 ```bash
 mkdir -p ~/.claude-workspaces

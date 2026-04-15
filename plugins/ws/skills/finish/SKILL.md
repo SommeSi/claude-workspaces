@@ -252,7 +252,7 @@ cat ~/.claude-workspaces/registry.json
 
 Remove the key matching this slot from `workspaces`. Recalculate `next_slot` as `max(remaining_slots) + 1` (or `1` if no workspaces remain). Slot reuse is handled automatically by the "scan 1, 2, 3... for first free" allocation algorithm in the start skills.
 
-Write the updated registry to `~/.claude-workspaces/registry.json`.
+Write the updated registry to `~/.claude-workspaces/registry.json`. **Use atomic write to prevent corruption** (see references/registry-format.md). Always re-read the registry before writing. Write the full JSON in a single operation.
 
 ### 5h — Reset terminal
 
