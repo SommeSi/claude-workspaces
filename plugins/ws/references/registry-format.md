@@ -47,6 +47,35 @@ Always handle missing file gracefully — initialize empty registry if not found
 
 Always read → modify → write the full file. Use the Write tool, never append.
 
+**IMPORTANT — Atomic writes to prevent corruption:**
+
+Multiple Claude sessions may write to the registry concurrently. To prevent corruption (duplicate keys, truncated JSON), always write via this pattern:
+
+```bash
+# Write to a temp file first, then atomically move it
+python3 -c "
+import json, os, tempfile
+
+registry_path = os.path.expanduser('~/.claude-workspaces/registry.json')
+
+# Read current
+try:
+    reg = json.load(open(registry_path))
+except (FileNotFoundError, json.JSONDecodeError):
+    reg = {'workspaces': {}, 'next_slot': 1}
+
+# ... modify reg ...
+
+# Atomic write: temp file + rename (rename is atomic on POSIX)
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(registry_path), suffix='.json')
+with os.fdopen(fd, 'w') as f:
+    json.dump(reg, f, indent=2)
+os.rename(tmp, registry_path)
+"
+```
+
+Alternatively, when using the Write tool, write the entire JSON content in one operation — never use append or partial writes.
+
 ## Finding a Workspace by Current Directory
 
 ```bash
