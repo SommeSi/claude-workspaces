@@ -53,6 +53,13 @@ For each repo, in sequence (do NOT parallelize — if one fails, abort both):
      🤖 Deployed with [Playground Deploy](https://github.com/sommesi/playground-deploy)
      ```
 
+5. Merge the PR immediately:
+   ```bash
+   gh pr merge <PR_NUMBER> --merge --delete-branch=false
+   ```
+   - Do NOT delete the source branch after merge — the user may keep working on it.
+   - If merge fails (e.g. merge conflict, required checks), inform the user and continue to the next repo.
+
 ## On failure
 
 If any repo fails at any step:
@@ -65,7 +72,7 @@ If any repo fails at any step:
 Display a summary:
 
 ```
-✅ PRs créées sur playground :
-   - front: <PR_URL>
-   - back: <PR_URL>
+✅ Déployé sur playground :
+   - front: <PR_URL> (merged ✅)
+   - back: <PR_URL> (merged ✅)
 ```
