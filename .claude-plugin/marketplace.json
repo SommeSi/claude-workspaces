@@ -27,13 +27,13 @@
       "category": "development"
     },
     {
-      "name": "vibe-deploy",
+      "name": "playground-deploy",
       "description": "Deploy to playground and promote to develop — zero git knowledge required",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "sommesi"
       },
-      "source": "./plugins/vibe-deploy",
+      "source": "./plugins/playground-deploy",
       "category": "development"
     }
   ]
