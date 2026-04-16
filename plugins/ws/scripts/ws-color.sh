@@ -36,14 +36,25 @@ except Exception:
 " 2>/dev/null)" 2>/dev/null || true
 
 if [ -n "${WS_COLOR:-}" ]; then
-  # Detect TTY
-  TTY_DEV="/dev/$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ')" 2>/dev/null || TTY_DEV=""
+  # Detect TTY — walk up the process tree to find the real terminal
+  TTY_DEV=""
+  pid=$$
+  for _ in 1 2 3 4 5; do
+    tty_name=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
+    if [ -n "$tty_name" ] && [ "$tty_name" != "??" ] && [ -w "/dev/$tty_name" ]; then
+      TTY_DEV="/dev/$tty_name"
+      break
+    fi
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [ -z "$pid" ] && break
+  done
 
-  if [ -n "$TTY_DEV" ] && [ -w "$TTY_DEV" ]; then
+  if [ -n "$TTY_DEV" ]; then
     printf '\033]11;%s\007' "$WS_COLOR" > "$TTY_DEV"
     printf '\033]1;%s %s [w%s]\007' "$WS_EMOJI" "$WS_BRANCH" "$WS_SLOT" > "$TTY_DEV"
     printf '\033]0;%s %s [w%s]\007' "$WS_EMOJI" "$WS_BRANCH" "$WS_SLOT" > "$TTY_DEV"
   else
+    # Last resort: write to stdout and hope it reaches the terminal
     printf '\033]11;%s\007' "$WS_COLOR"
     printf '\033]1;%s %s [w%s]\007' "$WS_EMOJI" "$WS_BRANCH" "$WS_SLOT"
     printf '\033]0;%s %s [w%s]\007' "$WS_EMOJI" "$WS_BRANCH" "$WS_SLOT"
