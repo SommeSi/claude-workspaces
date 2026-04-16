@@ -106,64 +106,13 @@ Wait for the user's response. Accept: `y`, `yes`, `o`, `oui`, or empty (just Ent
 
 ## Step 4 — Create the layout
 
-**IMPORTANT: Execute ALL WezTerm commands in a SINGLE Bash call.** Do not split into multiple Bash calls — each call has latency from Claude Code. One script = instant layout.
-
-Resolve paths first:
-- `"."` → `<workspace_path>`
-- `"back"` → `<workspace_path>/back`
-- `"front"` → `<workspace_path>/front`
-
-Then run **everything** in one bash block:
+**Run the ws-open.sh script** — it handles everything in one shot (instant):
 
 ```bash
-# Detect WezTerm CLI
-if [[ -x "/Applications/WezTerm.app/Contents/MacOS/wezterm" ]]; then
-  W="/Applications/WezTerm.app/Contents/MacOS/wezterm"
-else
-  W="$(which wezterm 2>/dev/null)"
-fi
-
-# --- Create window + panes ---
-TL=$($W cli spawn --new-window --cwd "<tl_cwd>")
-WINDOW_ID=$($W cli list --format json | python3 -c "
-import json, sys
-entries = json.load(sys.stdin)
-match = [e for e in entries if str(e['pane_id']) == '$TL']
-print(match[0]['window_id'] if match else '')
-")
-TR=$($W cli split-pane --pane-id $TL --right --percent 50 --cwd "<tr_cwd>")
-BL=$($W cli split-pane --pane-id $TL --bottom --percent 50 --cwd "<bl_cwd>")
-BR=$($W cli split-pane --pane-id $TR --bottom --percent 50 --cwd "<br_cwd>")
-
-# --- Send commands (use $'\n' for actual newline, NOT literal \n) ---
-$W cli send-text --pane-id $TL --no-paste $'clear && <tl_cmd>\n'
-$W cli send-text --pane-id $TR --no-paste $'clear && <tr_cmd>\n'
-$W cli send-text --pane-id $BL --no-paste $'clear\n'
-$W cli send-text --pane-id $BR --no-paste $'clear && <br_cmd>\n'
-
-# --- Claude tab (if terminal.claude_tab is true) ---
-CLAUDE_PANE=$($W cli spawn --window-id $WINDOW_ID --cwd "<workspace_path>")
-sleep 1
-$W cli send-text --pane-id $CLAUDE_PANE --no-paste $'clear && claude --name "<branch> [w<slot>]"\n'
-sleep 3
-$W cli send-text --pane-id $CLAUDE_PANE --no-paste $'/workspace:resume\n'
-
-# --- Fullscreen (if terminal.fullscreen is true, macOS only) ---
-sleep 0.5
-osascript -e '
-  tell application "WezTerm" to activate
-  delay 0.3
-  tell application "System Events"
-    tell process "WezTerm"
-      set value of attribute "AXFullScreen" of window 1 to true
-    end tell
-  end tell
-' 2>/dev/null || true
-
-echo "Layout created: window=$WINDOW_ID panes=TL=$TL TR=$TR BL=$BL BR=$BR claude=$CLAUDE_PANE"
+/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-open.sh" "<workspace_path>"
 ```
 
-For panes with `cmd: null`, send just `clear\n`. Omit the Claude tab block if `terminal.claude_tab` is `false`. Omit the fullscreen block if `terminal.fullscreen` is `false`. Adapt the grid if fewer than 4 panes (e.g. 2 panes = vertical split only).
+The script reads the registry + config, creates all WezTerm panes, sends commands, launches Claude tab, and goes fullscreen — all in a single process. No multiple Bash calls.
 
 ---
 
