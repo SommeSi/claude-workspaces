@@ -246,26 +246,13 @@ git -C "$worktree_path" pull origin develop 2>/dev/null || git -C "$worktree_pat
 
 ### 6c — Generate workspace files
 
-See references/generated-files.md for the exact file contents and templates.
+**Run the ws-generate-files.sh script** — it handles everything in one shot (CLAUDE.local.md, .worktree-env.sh, .vscode/settings.json per repo, .code-workspace, .env.local with port substitution):
 
-- Write `<workspace_path>/CLAUDE.local.md` — fill in slot, branch, mode (`worktree`), creation date, repos list, user description, spec link.
-- For each repo, write or merge `<workspace_path>/<repo.name>/.vscode/settings.json` — add `workbench.colorCustomizations` with the workspace color. If the file already exists, merge the color key without overwriting other settings.
-- If multi-repo (2+ repos), write `<workspace_path>/<slug>.code-workspace` — VS Code workspace file listing all repos with workspace color. See references/generated-files.md.
-- Write `<workspace_path>/.worktree-env.sh` — fill in slot, branch, color, emoji. This file is auto-sourced by the user's shell hook on `cd`. See references/generated-files.md for the template.
-- For each repo, generate `<workspace_path>/<repo.name>/.env.local`:
-  1. Look for an existing `.env.local` in the origin repo directory. Also check the **git root** of the project (the origin may be a subdirectory). Copy it as the base if found.
-  2. Also copy `.env.test`, `.env.development`, and any other `.env.*` files (except `.env.production`) from the same locations — these often contain secrets needed for dev.
-  3. Then **append or override** the workspace variables (PORT, WS_SLOT, WS_BRANCH, WS_COLOR, WS_EMOJI) and any `env_template` entries in the `.env.local`. **Always ensure the copied file ends with a newline** before appending — if the last line doesn't end with `\n`, add one first to prevent variables from being concatenated.
-  4. If a variable already exists in the base file, replace its value instead of duplicating the line.
-  5. **IMPORTANT — Port substitution in copied vars**: After copying from origin, scan ALL variables in the `.env.local` for hardcoded ports that match origin repo ports (e.g. `3001`, `3000`). Replace them with the workspace ports. For example, if origin back port is `3001` and workspace back port is `3051`, replace all occurrences of `:3001` with `:3051` in the entire file. Same for front port, webhook port, etc. This ensures vars like `RAILS_API_URL=http://127.0.0.1:3001` become `RAILS_API_URL=http://127.0.0.1:3051`.
+```bash
+CONFIG="<config_path>" PROJECT_ROOT="<git_root>" /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-generate-files.sh" "<workspace_path>" "<slot>" "<branch>" "<color>" "<emoji>" "worktree" "<spec>" "<goal>"
+```
 
-Variable substitution applies to `env_template` values:
-- `$SLOT` → slot number
-- `$BRANCH` → branch name
-- `$SLUG` → workspace slug
-- `$PORT` → port for the current repo
-- `$WORKSPACE_PATH` → workspace root directory
-- `$<REPO_NAME>_PORT` → port for a specific repo (uppercase repo name, e.g. `$BACK_PORT`)
+See references/generated-files.md for details on what gets generated.
 
 ### 6d — Database isolation (automatic)
 
