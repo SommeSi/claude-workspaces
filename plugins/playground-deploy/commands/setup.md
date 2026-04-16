@@ -6,93 +6,88 @@ disable-model-invocation: false
 
 Analyze what the current feature changes, then guide the user step by step to configure playground so the feature works with real data.
 
+**Avo playground URL:** `https://api.playground.sommesi.com/admin`
+
 ## Step 1 — Analyze the feature changes
 
 1. Detect the worktree root. The worktree contains two repos: `front/` and `back/`.
 2. Get the feature branch name: `git -C <repo> branch --show-current`
-3. Get the diff between the feature branch and develop for the backend:
+3. Get the full diff between the feature branch and develop for the backend:
    ```bash
    git -C back/ fetch origin develop
    git -C back/ diff origin/develop..HEAD --stat
    git -C back/ diff origin/develop..HEAD
    ```
-4. Also check the frontend diff for context:
+4. Also check the frontend diff for context (what pages/components were added):
    ```bash
    git -C front/ fetch origin develop
    git -C front/ diff origin/develop..HEAD --stat
    ```
 
-## Step 2 — Identify what needs to be configured
+## Step 2 — Read existing code for context
 
-From the diff analysis, identify:
+Before generating the checklist, read the relevant files to understand the data model:
 
-**Models & migrations:**
-- New models created (new migration files in `db/migrate/`)
-- New columns added to existing tables
-- New associations between models
+1. **New migrations**: read all new migration files to understand the schema
+2. **New models**: read model files to understand validations, associations, scopes
+3. **Existing seeds**: check `db/seeds/` to understand what data already exists
+4. **Routes**: check `config/routes/` to understand what endpoints exist
+5. **Avo resources**: check `app/avo/resources/` to know which models have an Avo admin panel
+6. **Feature configuration**: check references to `FeatureSubscription`, `FeatureConfiguration`, `ConfigurationLink` in the diff
 
-**Feature subscriptions & configuration:**
-- New feature slugs referenced in code
-- New `FeatureConfiguration` or `FeatureConfigurationTemplate` entries needed
-- New `ConfigurationLink` setups required
-- New API provider connections needed
+## Step 3 — Generate setup checklist
 
-**Seeds & reference data:**
-- New entries in `db/seeds/` files
-- New analytical slugs, VAT mappings, contract types, etc.
-- New `ApiProvider` entries
+Present the user with a clear, numbered checklist **in French**. Group by priority:
 
-**Routes & controllers:**
-- New API endpoints (may need test data to be useful)
-- New Avo resources (admin panels for new models)
+### Priority 1 — Activation de la feature (si nécessaire)
 
-## Step 3 — Generate a setup checklist
-
-Present the user with a clear, numbered checklist in French. Each item should be:
-- **What** to do (in plain language, no jargon)
-- **Where** to do it (exact Avo URL when possible)
-- **Why** it's needed (brief context)
-
-Format:
+If the feature references a new feature slug:
 
 ```
-🔧 Setup playground pour <feature-name>
-
-Voici ce qu'il faut configurer sur Avo (https://api.playground.sommesi.com/admin) :
-
-1. **Activer la feature "<feature_slug>"**
-   → Avo > FeatureSubscriptions > New
-   → Sélectionne ton organisation et la feature "<feature_slug>"
-   → Ça permet d'activer la feature pour ton orga
-
-2. **Créer la configuration <config_name>**
-   → Avo > FeatureConfigurations > New
-   → Renseigne : [fields]
-   → C'est nécessaire pour [reason]
-
-3. **Ajouter des données de test**
-   → Avo > <Model> > New
-   → Crée au moins 1-2 entrées avec [suggested values]
-   → Pour que la page ne soit pas vide
-
-...
+1. **Activer la feature "<feature_slug>" pour ton organisation**
+   → Va sur https://api.playground.sommesi.com/admin/resources/feature_subscriptions/new
+   → Sélectionne ton organisation
+   → Sélectionne la feature "<feature_slug>"
+   → Clique sur "Create"
 ```
 
-## Step 4 — Offer to generate a seed file (optional)
+### Priority 2 — Configuration requise
 
-After presenting the checklist, ask:
-> "Tu veux que je génère aussi un fichier seed pour automatiser ce setup ? Comme ça, la prochaine fois que playground est reset, tout sera reconfiguré automatiquement."
+If the feature needs `FeatureConfiguration`, `ConfigurationLink`, or API credentials:
 
-If yes:
-1. Generate an idempotent seed file using `find_or_create_by!` for all entries
-2. Save it in `db/seeds/playground/<feature-name>.rb`
-3. The user can then use `deploy:preview` to push it
+```
+2. **Créer la configuration <nom>**
+   → Va sur https://api.playground.sommesi.com/admin/resources/<resource>/new
+   → Renseigne les champs : <list specific fields from the migration>
+   → C'est nécessaire pour <reason from code analysis>
+```
+
+### Priority 3 — Données de démonstration
+
+If the feature introduces new models with pages that display data:
+
+```
+3. **Créer des données de test**
+   → Va sur https://api.playground.sommesi.com/admin/resources/<model_plural>/new
+   → Crée au moins 2-3 entrées
+   → Champs importants : <list required fields from model validations>
+   → Valeurs suggérées : <suggest realistic values based on the domain>
+```
+
+## Step 4 — Identify missing Avo resources
+
+If a new model does NOT have a corresponding Avo resource in `app/avo/resources/`:
+
+> "⚠️ Le modèle `<Model>` n'a pas de page admin Avo. Tu ne pourras pas créer de données via l'interface. Tu veux que je crée la resource Avo pour ce modèle ?"
+
+If the user says yes, generate the Avo resource file and include it in the next `deploy:preview`.
 
 ## Rules
 
 - **Always read the actual code** before generating the checklist. Don't guess model fields — read the migration files and model validations.
-- **Be specific with Avo URLs**: use `https://api.playground.sommesi.com/admin/resources/<resource_name>/new` when possible.
+- **Be specific with Avo URLs**: use `https://api.playground.sommesi.com/admin/resources/<resource_name>/new` format.
 - **Explain in French**, in plain language. The user is not a developer.
-- **Don't overwhelm**: if the feature only needs 1-2 things configured, keep it short.
-- **Prioritize**: list the most critical items first (feature activation > configuration > test data).
-- **Check existing seeds**: read `db/seeds/` to understand what data already exists and avoid duplicates.
+- **Don't overwhelm**: if the feature only needs 1-2 things configured, keep it short. If nothing needs to be configured, say so.
+- **Prioritize**: feature activation > configuration > test data.
+- **Suggest realistic values**: when proposing test data, use domain-appropriate values (real-looking company names, plausible amounts, etc.), not "test123".
+- **Check what already exists**: read `db/seeds/` to understand what organizations, features, and configurations already exist. Don't ask the user to create something that's already seeded.
