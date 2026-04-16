@@ -218,9 +218,25 @@ If a `pre_destroy` hook is defined in the project config (`.claude-workspaces.js
 eval "<pre_destroy_command_with_substitutions>"
 ```
 
-### 5d — Execute db_destroy hook
+### 5d — Database cleanup (automatic)
 
-If a `db_destroy` hook is defined in the project config, run it with the same variable substitution as above.
+Automatically drop the isolated databases created for this worktree. This runs **without any configuration**.
+
+1. Check each repo's `.env.local` for `DATABASE_URL` entries containing `_w<slot>` suffix
+2. If found, drop those databases:
+
+```bash
+source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
+cd <workspace_path>/<repo_name>
+
+# Rails
+bin/rails db:drop
+
+# Or generic PostgreSQL
+# dropdb <database_name_w<slot>>
+```
+
+3. If a `db_destroy` hook is defined in the project config, run that **instead** (hook has priority).
 
 ### 5e — Remove git worktrees (worktree mode only)
 

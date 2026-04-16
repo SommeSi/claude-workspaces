@@ -267,9 +267,45 @@ Variable substitution applies to `env_template` values:
 - `$WORKSPACE_PATH` → workspace root directory
 - `$<REPO_NAME>_PORT` → port for a specific repo (uppercase repo name, e.g. `$BACK_PORT`)
 
-### 6d — Execute hooks
+### 6d — Database isolation (automatic)
 
-If hooks are defined in the config, run them in this order: `post_create`, then `db_create`.
+Automatically detect and create an isolated database for the worktree. This runs **before** hooks and **without any configuration** from the user.
+
+**Detection**: For each repo, check for database configuration:
+- **Rails**: look for `config/database.yml` and/or `DATABASE_URL` in `.env.local`
+- **Node/Next.js**: look for `DATABASE_URL` in `.env.local`
+
+**If a database is detected**:
+
+1. Parse the current database name from `DATABASE_URL` or `database.yml` (e.g. `sommesi_app_development`)
+2. Create an isolated database name: `<original_name>_w<slot>` (e.g. `sommesi_app_development_w5`)
+3. Update `DATABASE_URL` in the worktree's `.env.local` to point to the new database name
+4. If there are multiple databases (cache, queue, cable), create isolated versions for each:
+   - `sommesi_app_development_cache_w5`
+   - `sommesi_app_development_queue_w5`
+   - `sommesi_app_development_cable_w5`
+5. Clone the database from staging (or main dev DB if staging is not available):
+
+```bash
+# Source shell profile for PATH
+source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
+
+cd <workspace_path>/<repo_name>
+
+# Rails: create DB and load schema
+bin/rails db:create
+bin/rails db:schema:load
+
+# If a db_create hook is defined, run it instead of the above
+```
+
+6. If a `db_create` hook is defined in `.claude-workspaces.json`, run that **instead** of the automatic commands above (the hook has priority).
+
+**If no database is detected**, skip this step silently.
+
+### 6e — Execute hooks
+
+If hooks are defined in the config, run them in this order: `post_create`, then `db_create` (if not already handled in 6d).
 
 Before running each hook command, perform variable substitution:
 - `$SLOT` → slot number
