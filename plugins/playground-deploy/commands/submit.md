@@ -91,7 +91,7 @@ For each repo, in sequence (if one fails, abort both):
      ✅ CI verte sur playground
      ✅ Code review passée
 
-     🤖 Promoted with [Claude Deploy Plugin](https://github.com/sommesi/claude-deploy-plugin)
+     🤖 Promoted with [Playground Deploy](https://github.com/sommesi/playground-deploy)
      ```
 
 ## On failure

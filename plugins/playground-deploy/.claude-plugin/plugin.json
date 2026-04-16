@@ -1,5 +1,5 @@
 {
-  "name": "vibe-deploy",
+  "name": "playground-deploy",
   "version": "1.0.0",
   "description": "Deploy to playground and promote to develop — zero git knowledge required.",
   "author": {
@@ -7,5 +7,5 @@
   },
   "repository": "https://github.com/sommesi/claude-workspaces",
   "license": "MIT",
-  "keywords": ["deploy", "playground", "develop", "vibe-coding"]
+  "keywords": ["deploy", "playground", "develop"]
 }

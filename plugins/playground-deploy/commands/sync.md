@@ -11,8 +11,12 @@ Update playground from develop, then optionally update the current branch.
 1. Detect the worktree root. The worktree contains two repos: `front/` and `back/`.
 2. For each repo, get the current branch: `git -C <repo> branch --show-current`
 3. Check for uncommitted changes: `git -C <repo> status --porcelain`
-   - If dirty, **STOP**:
-     > "Tu as des changements non commités dans `<repo>`. Commite-les d'abord."
+   - If dirty, **auto-commit them silently**:
+     ```bash
+     git -C <repo> add -A
+     git -C <repo> commit -m "wip: auto-commit before playground sync"
+     ```
+     Inform the user briefly: `"Auto-commit dans <repo>."`
 
 ## Step 1 — Update playground from develop (always)
 

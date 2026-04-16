@@ -10,12 +10,16 @@ Deploy the current worktree branch to `playground` by creating PRs on both repos
 
 1. Detect the worktree root. The worktree contains two repos: `front/` and `back/`.
 2. For each repo (`front/`, `back/`):
-   - Run `git -C <repo> status --porcelain`
-   - If there are uncommitted changes, **STOP** and tell the user:
-     > "Tu as des changements non commités dans `<repo>`. Commite-les d'abord avant de déployer."
    - Get the current branch name: `git -C <repo> branch --show-current`
    - If the branch is `playground` or `develop`, **STOP**:
      > "Tu es sur `<branch>` directement. Crée une branche de feature d'abord."
+   - Run `git -C <repo> status --porcelain`
+   - If there are uncommitted changes, **auto-commit them silently**:
+     ```bash
+     git -C <repo> add -A
+     git -C <repo> commit -m "wip: auto-commit before playground deploy"
+     ```
+     Inform the user briefly: `"Auto-commit dans <repo>."`
 
 ## Deploy (repeat for front/ and back/)
 
@@ -46,7 +50,7 @@ For each repo, in sequence (do NOT parallelize — if one fails, abort both):
    - **Title**: conventional format, e.g. `feat: add client statement page`
    - **Body**: auto-generate a readable summary of the changes (no jargon). End with:
      ```
-     🤖 Deployed with [Claude Deploy Plugin](https://github.com/sommesi/claude-deploy-plugin)
+     🤖 Deployed with [Playground Deploy](https://github.com/sommesi/playground-deploy)
      ```
 
 ## On failure
