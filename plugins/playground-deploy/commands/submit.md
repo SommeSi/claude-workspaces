@@ -4,25 +4,22 @@ description: Promote playground to develop with code review and CI check (front 
 disable-model-invocation: false
 ---
 
-Promote everything on `playground` to `develop` by creating PRs on both repos. Requires passing CI and code review.
+Promote playground to `develop` by creating PRs. One squashed commit per feature, identified by the worktree branch. develop is the source of truth.
+
+## Detect feature name
+
+1. Get the current branch name from the worktree:
+   ```bash
+   git -C <repo> branch --show-current
+   ```
+2. If the branch is a feature branch (e.g. `feat/demo-playground`), use it as the feature name for commit messages.
+3. If the branch is `playground` or `develop` (no worktree / not on a feature branch), use a generic name: `promote-playground`.
 
 ## Pre-flight (both repos)
 
 For each repo (`front/`, `back/`):
 
-1. Check that there are no open PRs targeting `playground` that are not yet merged:
-   ```bash
-   gh pr list --base playground --state open --json number,title,url
-   ```
-   - If open PRs exist, **STOP**:
-     > "Il y a encore des PRs ouvertes sur playground. Merge-les ou ferme-les d'abord :"
-     > (list the PRs)
-
-2. Check CI status on the playground branch:
-   ```bash
-   gh api repos/{owner}/{repo}/commits/playground/status --jq '.state'
-   ```
-   - Also check GitHub Actions runs:
+1. Check CI status on the playground branch:
    ```bash
    gh run list --branch playground --limit 1 --json status,conclusion,name
    ```
@@ -64,16 +61,17 @@ For each repo, in sequence (if one fails, abort both):
 
 2. Create a local branch from playground:
    ```bash
-   git -C <repo> checkout -B promote-playground-to-develop origin/playground
+   git -C <repo> checkout -B promote/<feature-name> origin/playground
    ```
 
 3. Squash all commits into a single one on top of develop:
    ```bash
    git -C <repo> reset --soft origin/develop
-   git -C <repo> commit -m "chore: promote playground to develop"
+   git -C <repo> commit -m "feat(<feature-name>): promote to develop"
    ```
-   - This produces a single clean commit containing all playground changes.
-   - If there are merge conflicts during reset (unlikely), fall back to rebase:
+   - This produces a single clean commit containing all playground changes for this feature.
+   - If there are no changes to commit (playground == develop), skip this repo.
+   - If reset fails, fall back to rebase:
      ```bash
      git -C <repo> rebase origin/develop
      ```
@@ -83,14 +81,13 @@ For each repo, in sequence (if one fails, abort both):
 
 4. Push:
    ```bash
-   git -C <repo> push --force-with-lease origin promote-playground-to-develop
+   git -C <repo> push --force-with-lease origin promote/<feature-name>
    ```
 
 5. Create PR:
    ```bash
-   gh pr create --base develop --head promote-playground-to-develop --title "<title>" --body "<body>"
+   gh pr create --base develop --head promote/<feature-name> --title "feat(<feature-name>): promote to develop" --body "<body>"
    ```
-   - **Title**: `chore: promote playground to develop`
    - **Body**: include the code review summary + list of changes. End with:
      ```
      ✅ CI verte sur playground
@@ -99,11 +96,16 @@ For each repo, in sequence (if one fails, abort both):
      🤖 Promoted with [Playground Deploy](https://github.com/sommesi/playground-deploy)
      ```
 
+6. Go back to the feature branch:
+   ```bash
+   git -C <repo> checkout <original-branch>
+   ```
+
 ## On failure
 
 If any repo fails:
 1. Abort any in-progress rebase: `git -C <repo> rebase --abort`
-2. Clean up the promote branch: `git -C <repo> checkout - && git -C <repo> branch -D promote-playground-to-develop`
+2. Clean up the promote branch: `git -C <repo> checkout <original-branch> && git -C <repo> branch -D promote/<feature-name>`
 3. Tell the user what went wrong.
 4. Do NOT continue with the other repo.
 
