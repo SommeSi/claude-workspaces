@@ -67,14 +67,19 @@ For each repo, in sequence (if one fails, abort both):
    git -C <repo> checkout -B promote-playground-to-develop origin/playground
    ```
 
-3. Rebase on develop:
+3. Squash all commits into a single one on top of develop:
    ```bash
-   git -C <repo> rebase origin/develop
+   git -C <repo> reset --soft origin/develop
+   git -C <repo> commit -m "chore: promote playground to develop"
    ```
-   - If conflicts arise: attempt to resolve. Read the files, understand intent, fix.
-   - If resolution is too complex (more than 3 files in conflict, or logic is ambiguous), **STOP**:
-     > "Le rebase a des conflits trop complexes dans `<repo>`. Demande à un dev de t'aider. Fichiers en conflit : <list>"
-   - Then abort: `git -C <repo> rebase --abort`
+   - This produces a single clean commit containing all playground changes.
+   - If there are merge conflicts during reset (unlikely), fall back to rebase:
+     ```bash
+     git -C <repo> rebase origin/develop
+     ```
+     - If resolution is too complex (more than 3 files in conflict, or logic is ambiguous), **STOP**:
+       > "Le rebase a des conflits trop complexes dans `<repo>`. Demande à un dev de t'aider. Fichiers en conflit : <list>"
+     - Then abort: `git -C <repo> rebase --abort`
 
 4. Push:
    ```bash
