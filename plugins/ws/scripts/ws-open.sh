@@ -54,7 +54,8 @@ fi
 
 # --- Load project config ---
 CONFIG_FILE=""
-for f in "$WS_PROJECT_ROOT/.claude-workspaces.json" "$WS_PATH/.claude-workspaces.json"; do
+WS_PROJECT_ROOT="${WS_PROJECT_ROOT:-}"
+for f in ${WS_PROJECT_ROOT:+"$WS_PROJECT_ROOT/.claude-workspaces.json"} "$WS_PATH/.claude-workspaces.json"; do
   if [ -f "$f" ]; then
     CONFIG_FILE="$f"
     break
