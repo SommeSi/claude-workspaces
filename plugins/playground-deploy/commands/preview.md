@@ -41,22 +41,27 @@ For each repo, in sequence (do NOT parallelize — if one fails, abort both):
    git -C <repo> push --force-with-lease origin <branch>
    ```
 
-4. Create or update PR:
-   ```bash
-   gh pr create --repo origin --base playground --head <branch> --title "<title>" --body "<body>"
-   ```
-   - If a PR already exists, skip creation and inform the user.
-   - Use `gh pr list --base playground --head <branch> --json number,url` to check first.
-   - **Title**: conventional format, e.g. `feat: add client statement page`
-   - **Body**: auto-generate a readable summary of the changes (no jargon). End with:
+4. Create or find existing PR:
+   - First check if a PR already exists:
+     ```bash
+     gh pr list --base playground --head <branch> --json number,url
      ```
-     🤖 Deployed with [Playground Deploy](https://github.com/sommesi/playground-deploy)
+   - If NO PR exists, create one:
+     ```bash
+     gh pr create --base playground --head <branch> --title "<title>" --body "<body>"
      ```
+     - **Title**: conventional format, e.g. `feat: add client statement page`
+     - **Body**: auto-generate a readable summary of the changes (no jargon). End with:
+       ```
+       🤖 Deployed with [Playground Deploy](https://github.com/sommesi/playground-deploy)
+       ```
+   - If a PR already exists, use its number for the next step.
 
-5. Merge the PR immediately:
+5. Merge the PR immediately (whether just created or already existing):
    ```bash
    gh pr merge <PR_NUMBER> --merge --delete-branch=false
    ```
+   - **Always merge** — this is the whole point of deploy:preview.
    - Do NOT delete the source branch after merge — the user may keep working on it.
    - If merge fails (e.g. merge conflict, required checks), inform the user and continue to the next repo.
 
