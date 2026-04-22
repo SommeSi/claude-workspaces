@@ -248,6 +248,45 @@ def clone_local_pg(isolated_url: str, slot: int) -> tuple:
         return False, (proc.stderr or proc.stdout or 'psql failed').strip()
     return True, f'{source_db} → {isolated_db}'
 
+def rewrite_database_yml(database_yml: str, slot: int) -> bool:
+    """Rewrite hardcoded DB names under development: in Rails config/database.yml.
+    Needed because Rails only honors DATABASE_URL for the primary connection.
+    Secondary DBs (cache/queue/cable in Solid Queue/Cache/Cable) read the
+    hardcoded `database:` key directly — without this rewrite, every worktree's
+    workers collide on the same queue DB and steal each other's jobs."""
+    if not os.path.isfile(database_yml):
+        return False
+    suffix = f'_w{slot}'
+    with open(database_yml) as f:
+        lines = f.read().split('\n')
+    in_dev = False
+    changed = False
+    out = []
+    for line in lines:
+        # Track whether we're inside development: block (top-level only)
+        if re.match(r'^development\s*:', line):
+            in_dev = True
+            out.append(line)
+            continue
+        if in_dev and re.match(r'^\S', line):
+            in_dev = False
+        if in_dev:
+            m = re.match(r'^(\s*database\s*:\s*)(\S+)(.*)$', line)
+            if m:
+                prefix, name, rest = m.group(1), m.group(2), m.group(3)
+                # Skip ERB (env-driven names)
+                if '<%' not in name and not name.endswith(suffix):
+                    new_line = f'{prefix}{name}{suffix}{rest}'
+                    out.append(new_line)
+                    changed = True
+                    continue
+        out.append(line)
+    if changed:
+        with open(database_yml, 'w') as f:
+            f.write('\n'.join(out))
+    return changed
+
+
 def parse_rails_db_names(database_yml: str):
     """Return list of DB names from Rails config/database.yml (development env)."""
     if not os.path.isfile(database_yml):
@@ -323,6 +362,11 @@ def process_repo(r):
     for ef in (env_local, env_main):
         if rewrite_env_local(ef, slot):
             print(f'    ✓ {os.path.basename(ef)} rewritten', file=buf)
+
+    # Rewrite config/database.yml — secondary DBs (cache/queue/cable) are not
+    # overridden by DATABASE_URL, so their hardcoded names must be suffixed.
+    if rewrite_database_yml(database_yml, slot):
+        print(f'    ✓ config/database.yml rewritten', file=buf)
 
     # scripts/db/.env holds STAGING/PROD credentials used by pull_db.sh etc.
     # Never overwrite it — only rewrite any local DB URLs it may contain.
