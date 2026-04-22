@@ -19,12 +19,16 @@ GOAL="${8:-}"
 DATE=$(date '+%Y-%m-%d')
 SLUG=$(echo "$BRANCH" | tr '/' '-')
 
-# --- Find config ---
-CONFIG=""
-PROJECT_ROOT=""
-for dir in "$WS_PATH" "$(git -C "$WS_PATH" rev-parse --show-toplevel 2>/dev/null || echo '')"; do
-  [ -n "$dir" ] && [ -f "$dir/.claude-workspaces.json" ] && CONFIG="$dir/.claude-workspaces.json" && PROJECT_ROOT="$dir" && break
-done
+# --- Find config (honor CONFIG/PROJECT_ROOT passed via env first) ---
+CONFIG="${CONFIG:-}"
+PROJECT_ROOT="${PROJECT_ROOT:-}"
+if [ -z "$CONFIG" ] || [ ! -f "$CONFIG" ]; then
+  CONFIG=""
+  PROJECT_ROOT=""
+  for dir in "$WS_PATH" "$(git -C "$WS_PATH" rev-parse --show-toplevel 2>/dev/null || echo '')"; do
+    [ -n "$dir" ] && [ -f "$dir/.claude-workspaces.json" ] && CONFIG="$dir/.claude-workspaces.json" && PROJECT_ROOT="$dir" && break
+  done
+fi
 
 # Also check parent project roots from registry
 if [ -z "$CONFIG" ] && [ -f "$HOME/.claude-workspaces/registry.json" ]; then
@@ -42,23 +46,31 @@ for s, w in reg.get('workspaces', {}).items():
 " 2>/dev/null)" 2>/dev/null || true
 fi
 
+# --- Fail loud if config expected but missing ---
+# For worktree mode with a real WS_PATH, a missing config means downstream
+# steps (env substitution, DB isolation, repo list in CLAUDE.local.md) will
+# silently no-op and produce a broken workspace. Better to crash early.
+if [ -z "$CONFIG" ] && [ "$MODE" = "worktree" ]; then
+  echo "❌ ws-generate-files: no .claude-workspaces.json found for $WS_PATH" >&2
+  echo "   Pass CONFIG=<path> PROJECT_ROOT=<path> via env, or ensure the config" >&2
+  echo "   exists at WS_PATH or at the parent git root. Refusing to generate a" >&2
+  echo "   half-configured workspace." >&2
+  exit 1
+fi
+
 # --- Parse config ---
+# NOTE: use a quoted heredoc + os.environ to avoid bash mangling '{' and '}'
+# inside "$(python3 -c "...{...}...")". That subtle bug made REPO_COUNT stay
+# unset, causing the per-repo loops below to silently skip.
 if [ -n "$CONFIG" ]; then
-  eval "$(python3 -c "
+  eval "$(CONFIG="$CONFIG" SLOT="$SLOT" PORT_STEP_HINT="10" python3 <<'PYEOF'
 import json, os
 
-config = json.load(open('$CONFIG'))
+config = json.load(open(os.environ['CONFIG']))
 repos = config.get('repos', [])
-port_step = config.get('port_step', 10)
-slot = int('$SLOT')
-ws_path = '$WS_PATH'
-branch = '$BRANCH'
-slug = '$SLUG'
-color = '$COLOR'
-emoji = '$EMOJI'
-project_root = '$PROJECT_ROOT'
+port_step = config.get('port_step', int(os.environ.get('PORT_STEP_HINT', '10')))
+slot = int(os.environ['SLOT'])
 
-# Calculate ports
 repo_info = []
 for r in repos:
     port = r.get('port_base', 3000) + slot * port_step
@@ -66,19 +78,18 @@ for r in repos:
         'name': r['name'],
         'port': port,
         'origin': r.get('origin', '.'),
-        'env_template': r.get('env_template', {})
     })
 
-# Output as shell vars
 names = ' '.join(r['name'] for r in repo_info)
 ports = ' '.join(str(r['port']) for r in repo_info)
 origins = '|'.join(r['origin'] for r in repo_info)
 print(f'REPO_NAMES=({names})')
 print(f'REPO_PORTS=({ports})')
-print(f'REPO_ORIGINS=\"{origins}\"')
+print(f'REPO_ORIGINS="{origins}"')
 print(f'REPO_COUNT={len(repo_info)}')
 print(f'PORT_STEP={port_step}')
-" 2>/dev/null)"
+PYEOF
+)"
 fi
 
 # Defaults if no config
@@ -114,6 +125,33 @@ $GOAL
 
 ## Spec
 $SPEC
+
+## Progress log
+
+<!--
+IMPORTANT — Progress recording protocol (read this at session start):
+
+You MUST record a checkpoint at natural milestones so that work survives
+reboots, compactions, and multi-day sessions. Use your judgment — don't
+log every bash call, but DO log:
+
+  • after completing a substantive task (feature, fix, refactor step done)
+  • after making a non-obvious decision (architectural choice, tradeoff)
+  • after discovering a blocker or root cause (bug, config issue, DB mismatch)
+  • before a long-running operation that might be interrupted
+  • before context gets heavy (anticipate compaction)
+
+How to record (one bash call, no tool approval needed, ~100ms):
+
+  /bin/bash "\${CLAUDE_PLUGIN_ROOT}/scripts/ws-checkpoint.sh" "1–3 concise sentences: what was done / decided / found"
+
+Or from anywhere:
+  /bin/bash ~/projects/ws/plugins/ws/scripts/ws-checkpoint.sh "..."
+
+Newest checkpoints appear at the TOP of this section. Git state is captured
+automatically per repo. If the last checkpoint is < 5 min old and covers the
+same topic, write a follow-up rather than duplicating.
+-->
 
 ## Notes / decisions / TODOs
 
@@ -214,6 +252,8 @@ fi
 
 # --- 5. .env.local per repo (copy from origin + substitute ports) ---
 if [ -n "$CONFIG" ] && [ "$REPO_COUNT" -gt 0 ]; then
+  CONFIG="$CONFIG" PROJECT_ROOT="$PROJECT_ROOT" WS_PATH="$WS_PATH" \
+  SLOT="$SLOT" BRANCH="$BRANCH" COLOR="$COLOR" EMOJI="$EMOJI" \
   python3 << 'PYEOF'
 import json, os, shutil
 
@@ -251,16 +291,32 @@ for r in repos:
     else:
         origin_path = os.path.normpath(os.path.join(project_root, origin))
 
-    # Copy .env* files from origin and project root
-    for search_dir in set([origin_path, project_root]):
-        if not search_dir or not os.path.isdir(search_dir):
-            continue
-        for f in sorted(os.listdir(search_dir)):
+    # Copy .env* files ONLY from this repo's own origin (not project_root).
+    # Copying from project_root too used to cross-pollute (e.g. front received
+    # back's .env.local), forcing a manual rm afterwards.
+    if os.path.isdir(origin_path):
+        for f in sorted(os.listdir(origin_path)):
             if f.startswith('.env') and 'production' not in f.lower():
-                src = os.path.join(search_dir, f)
+                src = os.path.join(origin_path, f)
                 dst = os.path.join(repo_path, f)
                 if os.path.isfile(src) and not os.path.isfile(dst):
                     shutil.copy2(src, dst)
+
+    # Copy Rails credentials + master keys from origin (required to boot Rails)
+    # These are gitignored per-repo, so the worktree won't have them until we copy.
+    creds_sources = [
+        ('config/master.key', 'config/master.key'),
+        ('config/credentials/development.key', 'config/credentials/development.key'),
+        ('config/credentials/test.key', 'config/credentials/test.key'),
+        ('config/credentials/staging.key', 'config/credentials/staging.key'),
+    ]
+    for rel_src, rel_dst in creds_sources:
+        src = os.path.join(origin_path, rel_src)
+        dst = os.path.join(repo_path, rel_dst)
+        if os.path.isfile(src) and not os.path.isfile(dst):
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
+            print(f'  ✓ {repo_name}/{rel_dst}')
 
     # Process .env.local
     env_local = os.path.join(repo_path, '.env.local')
@@ -327,6 +383,16 @@ for r in repos:
         f.write(content)
 
     print(f'  ✓ {repo_name}/.env.local (port {port})')
+
+    # Copy scripts/db/.env from origin if present (holds STAGING/PROD credentials
+    # used by pull_db.sh etc. — must NOT be clobbered with .env.local content).
+    scripts_db_dir = os.path.join(repo_path, 'scripts', 'db')
+    if os.path.isdir(scripts_db_dir):
+        origin_db_env = os.path.join(origin_path, 'scripts', 'db', '.env')
+        dst_db_env = os.path.join(scripts_db_dir, '.env')
+        if os.path.isfile(origin_db_env) and not os.path.isfile(dst_db_env):
+            shutil.copy2(origin_db_env, dst_db_env)
+            print(f'  ✓ {repo_name}/scripts/db/.env (from origin)')
 PYEOF
 fi
 

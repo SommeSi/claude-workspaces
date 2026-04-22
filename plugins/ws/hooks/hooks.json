@@ -8,6 +8,23 @@
             "type": "command",
             "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-progress-capture.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-progress-capture.sh\"",
+            "timeout": 10
           }
         ]
       }

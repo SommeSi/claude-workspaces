@@ -104,31 +104,22 @@ Also check if `.claude-workspaces.local.json` is in `.gitignore`. If not, sugges
 
 ---
 
-## Step 3 — Interactive dialogue (ONE question at a time, NEVER batch)
+## Step 3 — Interactive dialogue (one combined ask)
 
-Ask each question separately, waiting for the user's answer before asking the next.
+Ask the three inputs **in a single message** to minimize LLM ping-pong. The user can reply with short answers inline (one per line is fine).
 
-### 3a — Description
+```
+Pour créer ce workspace, j'ai besoin de 3 infos :
 
-Ask: **Briefly describe the goal of this workspace** (2–3 sentences). This will be written to `CLAUDE.local.md` to give future Claude sessions context.
+  1. Goal — décris brièvement le but (2–3 phrases, ira dans CLAUDE.local.md)
+  2. Branch — format conventionnel (feat/*, fix/*, chore/*, refactor/*, docs/*, test/*, style/*, perf/*)
+     → si tu donnes juste le goal, je proposerai un nom ; tu pourras corriger au recap
+  3. Spec — lien ticket/doc (optionnel, "skip" pour ignorer)
+```
 
-### 3b — Branch name
+**If the user gives only the goal**, auto-derive a branch name following conventional format (e.g. goal "ajouter l'export CSV pour Polo" → `feat/polo/export-csv`). The recap in Step 5 is where the user validates or corrects.
 
-Based on the user's description, **propose a branch name** following conventional format: `feat/`, `fix/`, `chore/`, `refactor/`, `docs/`, `test/`, `style/`, `perf/`.
-
-Example: if the user says "ajouter l'export CSV pour Polo", propose `feat/polo/export-csv`.
-
-Present it as a select:
-
-> Branch name suggestion:
-> 1. `feat/polo/export-csv`
-> 2. I want a different name
-
-If **2**, let the user type their own name.
-
-### 3c — Spec link
-
-Ask: **Is there a spec or ticket link for this work?** (optional — "no" or Enter to skip)
+**If the user provides all 3 upfront**, skip to Step 4 directly.
 
 ---
 
@@ -206,47 +197,19 @@ Wait for the user's response. Accept: `y`, `yes`, `o`, `oui`, or empty (just Ent
 
 Execute the following sub-steps in order. If any step fails, stop immediately, display the error, and clean up (see below).
 
-### 6a — Create workspace directory
+### 6a — Create worktrees (1 script call)
+
+Run the orchestration script — it handles `mkdir -p`, git worktree with automatic fallback (new branch / existing local / existing remote), and the base-branch pull for every repo. Repos are cloned **in parallel** internally:
 
 ```bash
-mkdir -p <workspace_path>
+/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-worktree-create.sh" "<workspace_path>" "<branch>" "<git_root>"
 ```
 
-### 6b — Create git worktrees
+If this exits non-zero, stop and clean up (see Rules below).
 
-For each repo in the config, resolve its absolute origin path:
+### 6b — Generate workspace files (1 script call)
 
-```bash
-# origin is relative to git root
-origin_abs="<git-root>/<repo.origin>"
-worktree_path="<workspace_path>/<repo.name>"
-```
-
-Then create the worktree:
-
-```bash
-# If the branch does not exist yet (new branch):
-git -C "$origin_abs" worktree add -b "<branch>" "$worktree_path"
-
-# If the branch already exists locally:
-git -C "$origin_abs" worktree add "$worktree_path" "<branch>"
-
-# If the branch exists on the remote but not locally:
-git -C "$origin_abs" fetch origin "<branch>"
-git -C "$origin_abs" worktree add --track -b "<branch>" "$worktree_path" "origin/<branch>"
-```
-
-Check the output of the first command. If it fails because the branch already exists, fall back to the second or third form accordingly.
-
-After creating the worktree, pull the latest changes from the base branch to ensure the worktree starts up to date:
-
-```bash
-git -C "$worktree_path" pull origin develop 2>/dev/null || git -C "$worktree_path" pull origin main 2>/dev/null || true
-```
-
-### 6c — Generate workspace files
-
-**Run the ws-generate-files.sh script** — it handles everything in one shot (CLAUDE.local.md, .worktree-env.sh, .vscode/settings.json per repo, .code-workspace, .env.local with port substitution):
+Run `ws-generate-files.sh` — it handles CLAUDE.local.md, .worktree-env.sh, .vscode/settings.json per repo, .code-workspace, .env.local with port substitution, **and copies Rails credentials** (`config/master.key`, `config/credentials/*.key`) so the new worktree can boot without manual setup:
 
 ```bash
 CONFIG="<config_path>" PROJECT_ROOT="<git_root>" /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-generate-files.sh" "<workspace_path>" "<slot>" "<branch>" "<color>" "<emoji>" "worktree" "<spec>" "<goal>"
@@ -254,65 +217,43 @@ CONFIG="<config_path>" PROJECT_ROOT="<git_root>" /bin/bash "${CLAUDE_PLUGIN_ROOT
 
 See references/generated-files.md for details on what gets generated.
 
-### 6d — Database isolation (automatic)
+### 6c — Database isolation (1 script call)
 
-Automatically detect and create an isolated database for the worktree. This runs **before** hooks and **without any configuration** from the user.
+Run `ws-db-isolate.sh` — it:
+1. Rewrites all local DB URLs (`DATABASE_URL`, `CACHE_DATABASE_URL`, `QUEUE_DATABASE_URL`, `CABLE_DATABASE_URL`) in `.env.local`/`.env` to `<name>_w<slot>`. Remote hosts (staging/prod) are left untouched.
+2. Mirrors the isolated `.env.local` into `scripts/db/.env` when that dir exists.
+3. **Clones the local source DB into the isolated DB** via `CREATE DATABASE ... TEMPLATE` (quasi-instantané, copie fichier sur le même serveur Postgres — la workspace démarre avec la vraie data locale, pas un schéma vide). Falls back to `bin/rails db:create db:schema:load` if the source DB doesn't exist locally. A custom `db_create` hook overrides the default.
+4. Pulling **staging** data is **not** done here — c'est plus lent et pas toujours voulu. Utiliser une skill dédiée à la demande.
 
-**Detection**: For each repo, check for database configuration:
-- **Rails**: look for `config/database.yml` and/or `DATABASE_URL` in `.env.local`
-- **Node/Next.js**: look for `DATABASE_URL` in `.env.local`
-
-**If a database is detected**:
-
-1. Parse the current database name from `DATABASE_URL` or `database.yml` (e.g. `sommesi_app_development`)
-2. Create an isolated database name: `<original_name>_w<slot>` (e.g. `sommesi_app_development_w5`)
-3. Update `DATABASE_URL` in the worktree's `.env.local` to point to the new database name
-4. If there are multiple databases (cache, queue, cable), create isolated versions for each:
-   - `sommesi_app_development_cache_w5`
-   - `sommesi_app_development_queue_w5`
-   - `sommesi_app_development_cable_w5`
-5. Clone the database from staging (or main dev DB if staging is not available):
+Repos are processed **in parallel**:
 
 ```bash
-# Source shell profile for PATH
-source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
-
-cd <workspace_path>/<repo_name>
-
-# Rails: create DB and load schema
-bin/rails db:create
-bin/rails db:schema:load
-
-# If a db_create hook is defined, run it instead of the above
+/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-db-isolate.sh" "<workspace_path>" "<slot>"
 ```
 
-6. If a `db_create` hook is defined in `.claude-workspaces.json`, run that **instead** of the automatic commands above (the hook has priority).
+Silent no-op when no database is detected.
 
-**If no database is detected**, skip this step silently.
+### 6d — Execute post_create hook
 
-### 6e — Execute hooks
-
-If hooks are defined in the config, run them in this order: `post_create`, then `db_create` (if not already handled in 6d).
-
-Before running each hook command, perform variable substitution:
+If `hooks.post_create` is defined in the config, run it with variable substitution:
 - `$SLOT` → slot number
 - `$BRANCH` → branch name
 - `$SLUG` → workspace slug
-- `$PORT` → port for the first repo (or primary repo)
+- `$PORT` → port for the first repo
 - `$WORKSPACE_PATH` → workspace root path (with `~` expanded to `$HOME`)
 
 ```bash
-# Source the user's shell profile to get full PATH (bun, nvm, rbenv, etc.)
+# Source shell profile to get full PATH (bun, nvm, rbenv, etc.)
 source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
-
-# Evaluate the hook string with substituted vars
 eval "<hook_command_with_substitutions>"
 ```
 
-**If any hook exits with a non-zero status:**
-1. Display the error output clearly.
-2. Attempt cleanup: remove worktrees with `git worktree remove --force`, remove the workspace directory with `rm -rf`.
+**If the hook exits non-zero:**
+1. Display the error output.
+2. Clean up: `git worktree remove --force` for each repo, then `rm -rf <workspace_path>`.
 3. Stop — do NOT update the registry.
+
+Note: `db_create` is handled by `ws-db-isolate.sh` in Step 6c — do not re-run it here.
 
 ### 6e — Update registry
 
@@ -350,7 +291,7 @@ Write the updated registry to `~/.claude-workspaces/registry.json`. **Use atomic
 mkdir -p ~/.claude-workspaces
 ```
 
-### 6f — Color the terminal
+### 6f — Color the terminal (optional — only if run interactively in a workspace-aware terminal)
 
 ```bash
 /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-color.sh" "<workspace_path>"
@@ -392,3 +333,4 @@ If **1**, execute the `/workspace:open` skill (skipping Step 1 since we already 
 - **Always read the registry before writing.** Never overwrite without reading first.
 - **Expand `~` to `$HOME` in all paths** before running shell commands or writing files.
 - **Gracefully handle missing files.** Registry may not exist yet — initialize it if absent.
+- **Do NOT spawn subagents or reimplement script work inline.** Parallelism is internal to the shell scripts (worktree creation and DB isolation fan out across repos). Stick to the script calls — do not rewrite env files with inline `python3 -c` or re-run steps "just to be sure". For long `post_create` installs across repos, prefer shell-level parallelism in the hook itself (e.g. `(cd back && bundle install) & (cd front && bun install) & wait`).

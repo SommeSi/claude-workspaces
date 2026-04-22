@@ -165,31 +165,7 @@ Default is **NO**. Only proceed if the user explicitly answers `y` or `yes`. Any
 
 Execute each sub-step in order. If a step fails, log a warning and **continue** — do not abort the entire cleanup.
 
-### 5a — Close WezTerm window (if terminal layout configured)
-
-If the project config has a `terminal` section, close the WezTerm window for this workspace:
-
-```bash
-osascript -e '
-  tell application "System Events"
-    if exists process "WezTerm" then
-      tell process "WezTerm"
-        repeat with w in windows
-          try
-            if (name of w) contains "[w<slot>]" then
-              click (first button of w whose subrole is "AXCloseButton")
-            end if
-          end try
-        end repeat
-      end tell
-    end if
-  end tell
-' 2>/dev/null
-```
-
-Log: `✓ Closed WezTerm window` or `- No WezTerm window found`.
-
-### 5b — Kill processes on ports
+### 5a — Kill processes on ports
 
 For each port in the workspace:
 
@@ -205,72 +181,35 @@ fi
 
 Log: `✓ Killed process on port <port>` or `- Nothing on port <port>`.
 
-### 5c — Execute pre_destroy hook
+### 5b — Execute pre_destroy hook
 
-If a `pre_destroy` hook is defined in the project config (`.claude-workspaces.json`), run it with variable substitution:
-
-- `$SLOT` → slot number
-- `$BRANCH` → branch name
-- `$SLUG` → workspace slug
-- `$WORKSPACE_PATH` → workspace root path (with `~` expanded to `$HOME`)
+If a `pre_destroy` hook is defined in `.claude-workspaces.json`, run it with variable substitution (`$SLOT`, `$BRANCH`, `$SLUG`, `$WORKSPACE_PATH` with `~` expanded to `$HOME`):
 
 ```bash
 eval "<pre_destroy_command_with_substitutions>"
 ```
 
-### 5d — Database cleanup (automatic)
+### 5c — Orchestrated destroy (1 script call)
 
-Automatically drop the isolated databases created for this worktree. This runs **without any configuration**.
-
-1. Check each repo's `.env.local` for `DATABASE_URL` entries containing `_w<slot>` suffix
-2. If found, drop those databases:
+Run `ws-destroy.sh` — it handles **everything** in parallel across repos: drop isolated `_w<slot>` DBs via `dropdb` (no Rails/bundler dependency), `git worktree remove --force` per repo, delete the workspace directory, and atomic registry update:
 
 ```bash
-source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
-cd <workspace_path>/<repo_name>
-
-# Rails
-bin/rails db:drop
-
-# Or generic PostgreSQL
-# dropdb <database_name_w<slot>>
+CONFIG="<config_path>" PROJECT_ROOT="<git_root>" \
+  /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-destroy.sh" "<workspace_path>" "<slot>"
 ```
 
-3. If a `db_destroy` hook is defined in the project config, run that **instead** (hook has priority).
+The script:
+- Reads DB URLs from each repo's `.env.local` / `.env`, filters to `_w<slot>` suffix (**refuse of drop any non-isolated DB**)
+- Runs `dropdb --if-exists` per DB, parallel across repos
+- `git worktree remove --force` per repo, parallel
+- `rm -rf <workspace_path>`
+- Atomic registry update (tempfile + rename)
 
-### 5e — Remove git worktrees (worktree mode only)
+If a `db_destroy` hook is defined in the project config, it takes priority over `dropdb` (future enhancement — currently `dropdb` is always used).
 
-For each repo in the workspace:
+Partial failures don't abort: each DB / worktree removal is best-effort with a warning. Continue to 5d.
 
-```bash
-git -C <project_root>/<repo_origin> worktree remove <repo_path> --force
-```
-
-Where `<repo_origin>` is the relative origin path from `.claude-workspaces.json`.
-
-Log: `✓ Removed worktree <repo_name>` or `⚠ Failed to remove worktree <repo_name>: <error>`.
-
-### 5f — Remove workspace directory
-
-```bash
-rm -rf <workspace_path>
-```
-
-Log: `✓ Removed directory <workspace_path>`.
-
-### 5g — Update registry
-
-Read the registry, remove the entry for this slot, and write it back:
-
-```bash
-cat ~/.claude-workspaces/registry.json
-```
-
-Remove the key matching this slot from `workspaces`. Recalculate `next_slot` as `max(remaining_slots) + 1` (or `1` if no workspaces remain). Slot reuse is handled automatically by the "scan 1, 2, 3... for first free" allocation algorithm in the start skills.
-
-Write the updated registry to `~/.claude-workspaces/registry.json`. **Use atomic write to prevent corruption** (see references/registry-format.md). Always re-read the registry before writing. Write the full JSON in a single operation.
-
-### 5h — Reset terminal
+### 5d — Reset terminal
 
 Reset the terminal title and background color:
 
@@ -284,7 +223,7 @@ printf '\033]1;\007' > "$TTY_DEV" 2>/dev/null
 printf '\033]0;\007' > "$TTY_DEV" 2>/dev/null
 ```
 
-### 5i — Close workspace window
+### 5e — Close workspace window
 
 Close the WezTerm window associated with this workspace. Find it by matching the workspace path in the pane list:
 
