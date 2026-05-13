@@ -117,7 +117,9 @@ Pour créer ce workspace, j'ai besoin de 3 infos :
   3. Spec — lien ticket/doc (optionnel, "skip" pour ignorer)
 ```
 
-**If the user gives only the goal**, auto-derive a branch name following conventional format (e.g. goal "ajouter l'export CSV pour Polo" → `feat/polo/export-csv`). The recap in Step 5 is where the user validates or corrects.
+**If the user gives only the goal**, auto-derive a branch name following conventional format (e.g. goal "ajouter l'export CSV pour Polo" → `feat/polo/export-csv`).
+
+**Branch name derivation is pure string manipulation — DO NOT use any tools.** No `Read`, no `Grep`, no `Glob`, no `Bash`, no codebase exploration. Just: pick a conventional prefix from the goal's verb (`ajouter/feat`, `fix/fix`, `refactor/refactor`, …), extract 2–4 keywords, slugify them, and join with `/`. The user validates at Step 5 and corrects if needed — that's the whole point of the recap. Spending tool calls to "verify" names defeats the optimization.
 
 **If the user provides all 3 upfront**, skip to Step 4 directly.
 
