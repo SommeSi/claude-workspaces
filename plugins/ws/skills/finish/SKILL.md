@@ -26,20 +26,30 @@ Match `pwd` against the `workspace_path` of each registry entry (check if `pwd` 
 
 ---
 
-## Step 2 — Safety checks (run all git commands in parallel for all repos)
+## Step 2 — Safety checks (delegated to scripts, parallel across repos)
 
-For each repo in the workspace, run these three commands:
+For each repo, run these two commands in parallel:
 
 ```bash
 git -C <repo_path> status --short
 git -C <repo_path> branch --show-current
-git -C <repo_path> log main..HEAD --oneline 2>/dev/null || git -C <repo_path> log develop..HEAD --oneline 2>/dev/null || echo "COULD_NOT_COMPARE"
 ```
 
-Also run for worktree mode repos:
+For worktree-mode repos, also run the merge-safety script — it handles fetch, GitHub PR lookup, base auto-detection, and patch-equivalent (squash/rebase) detection:
 
 ```bash
-git ls-remote --heads origin <branch> | wc -l
+"${CLAUDE_PLUGIN_ROOT}/scripts/ws-check-merged.sh" <repo_path> <branch>
+```
+
+The script prints `key=value` lines (`STATUS`, `REASON`, `METHOD`, `BASE`, `COMMITS_AHEAD`, `UNMERGED_COMMITS`) and exits with:
+- `0` → branch merged or no commits ahead → **safe**
+- `1` → unmerged commits exist → **block, ask for confirmation**
+- `2` → unknown (offline, no base ref, …) → **warn, ask for confirmation**
+
+For worktree mode, also note whether the branch is on the remote (informational only):
+
+```bash
+git -C <repo_path> ls-remote --heads origin <branch> | wc -l
 ```
 
 ### Check 1 — Uncommitted files
@@ -52,16 +62,25 @@ Default is **NO**. Only proceed if the user explicitly answers `y` or `yes`.
 
 ### Check 2 — Unmerged branch (worktree mode only)
 
-If `git log main..HEAD` (or `develop..HEAD`) shows any commits for any repo, show them and require explicit confirmation:
+Parse the output of `ws-check-merged.sh`:
 
-> ⚠️ Branch `<branch>` has N commit(s) not in main/develop in `<repo_name>`:
-> `<commit list>`
-> This branch is **NOT merged**. Deleting it means losing this work.
-> Tip: consider creating a PR first (`gh pr create`).
->
-> Are you absolutely sure you want to delete unmerged work? Type "delete unmerged" to confirm.
+- If `STATUS=safe` → **no prompt**, the branch is merged (PR merged on GitHub, or patch-equivalent on base — handles squash/rebase). Continue silently.
+- If `STATUS=unmerged` → show the commits and require explicit confirmation:
 
-Default is **NO**. Only proceed if the user explicitly types `delete unmerged`. This is stricter than other confirmations because losing unmerged work is the most dangerous action.
+  > ⚠️ Branch `<branch>` has N commit(s) not on `<base>` in `<repo_name>`:
+  > `<UNMERGED_COMMITS list>`
+  > This branch is **NOT merged**. Deleting it means losing this work.
+  > Tip: consider creating a PR first (`gh pr create`).
+  >
+  > Are you absolutely sure you want to delete unmerged work? Type "delete unmerged" to confirm.
+
+  Default is **NO**. Only proceed if the user explicitly types `delete unmerged`.
+
+- If `STATUS=unknown` → fall back to a soft warning:
+
+  > ⚠️ Could not verify merge state for `<branch>` in `<repo_name>` (`<REASON>`). Continue anyway? [y/N]
+
+  Default is **NO**.
 
 ### Check 3 — Branch not on remote (worktree mode only, informational)
 
