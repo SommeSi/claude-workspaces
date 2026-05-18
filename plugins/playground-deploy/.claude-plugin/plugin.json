@@ -1,7 +1,7 @@
 {
   "name": "playground-deploy",
-  "version": "1.6.0",
-  "description": "Deploy to playground and promote to develop — zero git knowledge required.",
+  "version": "1.7.0",
+  "description": "Déploie sur playground et promeut vers develop — zéro connaissance git requise.",
   "author": {
     "name": "sommesi"
   },

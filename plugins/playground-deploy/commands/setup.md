@@ -1,47 +1,47 @@
 ---
 allowed-tools: Bash(git *), Bash(gh *)
-description: Analyze feature changes and guide user to configure playground via Avo
+description: Analyse les changements de la feature et guide pas-à-pas la configuration playground via Avo
 disable-model-invocation: false
 ---
 
-Analyze what the current feature changes, then guide the user step by step to configure playground so the feature works with real data.
+Analyse ce que la feature courante modifie, puis guide l'utilisateur pas à pas pour configurer playground (= environnement de test partagé) afin que la feature marche avec de vraies données.
 
-**Avo playground URL:** `https://api.playground.sommesi.com/admin`
+**URL Avo playground** (Avo = l'interface d'administration en ligne) : `https://api.playground.sommesi.com/admin`
 
-## Step 1 — Analyze the feature changes
+## Étape 1 — Analyser les changements de la feature
 
-1. Detect the worktree root. The worktree contains two repos: `front/` and `back/`.
-2. Get the feature branch name: `git -C <repo> branch --show-current`
-3. Get the full diff between the feature branch and develop for the backend:
+1. Repère la racine du worktree (= dossier de travail isolé). Il contient deux dépôts : `front/` (interface) et `back/` (serveur).
+2. Récupère le nom de la branche de feature : `git -C <repo> branch --show-current`
+3. Récupère le diff complet (= les différences) entre la branche de feature et develop côté backend :
    ```bash
    git -C back/ fetch origin develop
    git -C back/ diff origin/develop..HEAD --stat
    git -C back/ diff origin/develop..HEAD
    ```
-4. Also check the frontend diff for context (what pages/components were added):
+4. Regarde aussi le diff côté frontend pour le contexte (quelles pages/composants ont été ajoutés) :
    ```bash
    git -C front/ fetch origin develop
    git -C front/ diff origin/develop..HEAD --stat
    ```
 
-## Step 2 — Read existing code for context
+## Étape 2 — Lire le code existant pour le contexte
 
-Before generating the checklist, read the relevant files to understand the data model:
+Avant de générer la checklist, lis les fichiers pertinents pour comprendre le modèle de données :
 
-1. **New migrations**: read all new migration files to understand the schema
-2. **New models**: read model files to understand validations, associations, scopes
-3. **Existing seeds**: check `db/seeds/` to understand what data already exists
-4. **Routes**: check `config/routes/` to understand what endpoints exist
-5. **Avo resources**: check `app/avo/resources/` to know which models have an Avo admin panel
-6. **Feature configuration**: check references to `FeatureSubscription`, `FeatureConfiguration`, `ConfigurationLink` in the diff
+1. **Nouvelles migrations** (= scripts qui modifient la structure de la base de données) : lis tous les nouveaux fichiers de migration pour comprendre le schéma.
+2. **Nouveaux modèles** (= classes qui représentent une table en base) : lis-les pour comprendre les validations, associations, scopes.
+3. **Seeds existants** (= données initiales préchargées) : regarde `db/seeds/` pour comprendre ce qui existe déjà.
+4. **Routes** : regarde `config/routes/` pour savoir quels endpoints (= points d'entrée de l'API) existent.
+5. **Resources Avo** : regarde `app/avo/resources/` pour savoir quels modèles ont un panneau d'admin dans Avo.
+6. **Configuration de feature** : repère les références à `FeatureSubscription`, `FeatureConfiguration`, `ConfigurationLink` dans le diff.
 
-## Step 3 — Generate setup checklist
+## Étape 3 — Générer la checklist de configuration
 
-Present the user with a clear, numbered checklist **in French**. Group by priority:
+Présente à l'utilisateur une checklist numérotée et claire, **en français**. Regroupe par priorité :
 
-### Priority 1 — Activation de la feature (si nécessaire)
+### Priorité 1 — Activation de la feature (si nécessaire)
 
-If the feature references a new feature slug:
+Si la feature référence un nouveau slug de feature (= identifiant court) :
 
 ```
 1. **Activer la feature "<feature_slug>" pour ton organisation**
@@ -51,43 +51,43 @@ If the feature references a new feature slug:
    → Clique sur "Create"
 ```
 
-### Priority 2 — Configuration requise
+### Priorité 2 — Configuration requise
 
-If the feature needs `FeatureConfiguration`, `ConfigurationLink`, or API credentials:
+Si la feature a besoin de `FeatureConfiguration`, `ConfigurationLink`, ou d'identifiants d'API :
 
 ```
 2. **Créer la configuration <nom>**
    → Va sur https://api.playground.sommesi.com/admin/resources/<resource>/new
-   → Renseigne les champs : <list specific fields from the migration>
-   → C'est nécessaire pour <reason from code analysis>
+   → Renseigne les champs : <liste des champs spécifiques tirés de la migration>
+   → C'est nécessaire parce que <raison tirée de l'analyse du code>
 ```
 
-### Priority 3 — Données de démonstration
+### Priorité 3 — Données de démonstration
 
-If the feature introduces new models with pages that display data:
+Si la feature introduit de nouveaux modèles avec des pages qui affichent des données :
 
 ```
 3. **Créer des données de test**
-   → Va sur https://api.playground.sommesi.com/admin/resources/<model_plural>/new
+   → Va sur https://api.playground.sommesi.com/admin/resources/<modele_pluriel>/new
    → Crée au moins 2-3 entrées
-   → Champs importants : <list required fields from model validations>
-   → Valeurs suggérées : <suggest realistic values based on the domain>
+   → Champs importants : <liste des champs requis tirée des validations du modèle>
+   → Valeurs suggérées : <propose des valeurs réalistes basées sur le métier>
 ```
 
-## Step 4 — Identify missing Avo resources
+## Étape 4 — Repérer les resources Avo manquantes
 
-If a new model does NOT have a corresponding Avo resource in `app/avo/resources/`:
+Si un nouveau modèle n'a PAS de resource Avo correspondante dans `app/avo/resources/` :
 
 > "⚠️ Le modèle `<Model>` n'a pas de page admin Avo. Tu ne pourras pas créer de données via l'interface. Tu veux que je crée la resource Avo pour ce modèle ?"
 
-If the user says yes, generate the Avo resource file and include it in the next `deploy:preview`.
+Si l'utilisateur dit oui, génère le fichier de resource Avo et inclus-le dans le prochain `deploy:preview`.
 
-## Rules
+## Règles
 
-- **Always read the actual code** before generating the checklist. Don't guess model fields — read the migration files and model validations.
-- **Be specific with Avo URLs**: use `https://api.playground.sommesi.com/admin/resources/<resource_name>/new` format.
-- **Explain in French**, in plain language. The user is not a developer.
-- **Don't overwhelm**: if the feature only needs 1-2 things configured, keep it short. If nothing needs to be configured, say so.
-- **Prioritize**: feature activation > configuration > test data.
-- **Suggest realistic values**: when proposing test data, use domain-appropriate values (real-looking company names, plausible amounts, etc.), not "test123".
-- **Check what already exists**: read `db/seeds/` to understand what organizations, features, and configurations already exist. Don't ask the user to create something that's already seeded.
+- **Lis toujours le code réel** avant de générer la checklist. Ne devine pas les champs d'un modèle — lis les fichiers de migration et les validations du modèle.
+- **Sois précis avec les URLs Avo** : utilise le format `https://api.playground.sommesi.com/admin/resources/<nom_resource>/new`.
+- **Explique en français**, en langage simple. L'utilisateur n'est pas développeur.
+- **N'inonde pas** : si la feature n'a besoin que d'1-2 choses, fais court. Si rien n'a besoin d'être configuré, dis-le.
+- **Priorise** : activation de feature > configuration > données de test.
+- **Propose des valeurs réalistes** : pour les données de test, utilise des valeurs cohérentes avec le métier (noms d'entreprises crédibles, montants plausibles, etc.), pas "test123".
+- **Vérifie ce qui existe déjà** : lis `db/seeds/` pour comprendre quelles organisations, features et configurations sont déjà en place. Ne demande pas à l'utilisateur de créer quelque chose qui est déjà seedé.

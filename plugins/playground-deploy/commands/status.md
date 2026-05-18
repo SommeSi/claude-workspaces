@@ -1,67 +1,67 @@
 ---
 allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh api *), Bash(gh run *)
-description: Show deployment status — all PRs on playground, your PRs on develop
+description: Affiche l'état des déploiements — toutes les PR sur playground, tes PR sur develop
 disable-model-invocation: false
 ---
 
-Show the current state of deployments across playground and develop for both repos.
+Affiche l'état actuel des déploiements sur playground (= environnement de test partagé) et develop (= branche de référence du code prêt à partir en prod) pour les deux dépôts.
 
-## Detect context
+## Détecter le contexte
 
-1. Detect the worktree root. The worktree contains two repos: `front/` and `back/`.
+1. Repère la racine du worktree (= dossier de travail isolé). Il contient deux dépôts : `front/` (interface) et `back/` (serveur).
 
-## Playground — Full view (both repos)
+## Playground — Vue complète (les deux dépôts)
 
-For each repo (`front/`, `back/`):
+Pour chaque dépôt (`front/`, `back/`) :
 
-1. List all open PRs targeting playground:
+1. Liste toutes les PR ouvertes (= Pull Requests, = propositions de modification du code) qui ciblent playground :
    ```bash
    gh pr list --base playground --state open --json number,title,author,url,createdAt,statusCheckRollup
    ```
 
-2. List recently merged PRs (last 10):
+2. Liste les PR récemment fusionnées (les 10 dernières) :
    ```bash
    gh pr list --base playground --state merged --limit 10 --json number,title,author,url,mergedAt
    ```
 
-3. Check CI status on playground branch:
+3. Vérifie l'état de la CI (= les tests automatiques qui vérifient que le code marche) sur la branche playground :
    ```bash
    gh run list --branch playground --limit 3 --json name,status,conclusion,createdAt
    ```
 
-## Develop — Your PRs only (both repos)
+## Develop — Tes PR uniquement (les deux dépôts)
 
-For each repo (`front/`, `back/`):
+Pour chaque dépôt (`front/`, `back/`) :
 
-1. List your open PRs targeting develop:
+1. Liste tes PR ouvertes qui ciblent develop :
    ```bash
    gh pr list --base develop --state open --author @me --json number,title,url,createdAt,statusCheckRollup,reviewDecision
    ```
 
-2. List your recently merged PRs (last 5):
+2. Liste tes PR récemment fusionnées (les 5 dernières) :
    ```bash
    gh pr list --base develop --state merged --author @me --limit 5 --json number,title,url,mergedAt
    ```
 
-## Output
+## Affichage à présenter
 
-Present a clean, readable summary:
+Présente un récap clair et lisible :
 
 ```
 📦 Playground
-   🔵 Open PRs:
-      - front #42: "feat: add form" (by alice) — CI ✅
-      - back #18: "feat: add endpoint" (by alice) — CI ⏳
-   ✅ Recently merged:
-      - front #41: "fix: typo" (by bob) — merged 2h ago
-      - back #17: "fix: validation" (by bob) — merged 2h ago
-   CI: ✅ All checks passing
+   🔵 PR ouvertes :
+      - front #42 : "feat: ajout formulaire" (par alice) — CI ✅
+      - back  #18 : "feat: ajout endpoint" (par alice) — CI ⏳
+   ✅ Récemment fusionnées :
+      - front #41 : "fix: typo" (par bob) — fusionnée il y a 2h
+      - back  #17 : "fix: validation" (par bob) — fusionnée il y a 2h
+   CI : ✅ Tous les tests passent
 
-🚀 Develop (your PRs)
-   🔵 Open:
-      - front #39: "chore: promote playground" — review pending
-   ✅ Merged:
-      - back #15: "chore: promote playground" — merged yesterday
+🚀 Develop (tes PR)
+   🔵 Ouvertes :
+      - front #39 : "chore: promote playground" — review en attente
+   ✅ Fusionnées :
+      - back  #15 : "chore: promote playground" — fusionnée hier
 ```
 
-If there are no PRs in a section, say "Aucune PR" instead of leaving it empty.
+S'il n'y a aucune PR dans une section, écris "Aucune PR" plutôt que de laisser vide.

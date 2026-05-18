@@ -1,94 +1,95 @@
 ---
 allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh api *), Bash(gh pr checks *), Bash(gh run *)
-description: Promote playground to develop with code review and CI check (front + back)
+description: Promeut playground vers develop avec code review et vérification CI (front + back)
 disable-model-invocation: false
 ---
 
-Promote playground to `develop` by creating PRs. One squashed commit per feature, identified by the worktree branch. develop is the source of truth.
+Promeut `playground` (= environnement de test partagé) vers `develop` (= branche de référence du code prêt pour la prod) en créant des PR (= Pull Requests, propositions de modification). Un seul commit squashé (= compressé en un seul) par feature, identifié par le nom de la branche du worktree. C'est develop qui fait foi (= la source de vérité du code).
 
-## Detect feature name
+## Détecter le nom de la feature
 
-1. Get the current branch name from the worktree:
+1. Récupère le nom de la branche courante du worktree :
    ```bash
    git -C <repo> branch --show-current
    ```
-2. If the branch is a feature branch (e.g. `feat/demo-playground`), use it as the feature name for commit messages.
-3. If the branch is `playground` or `develop` (no worktree / not on a feature branch), use a generic name: `promote-playground`.
+2. Si c'est une branche de feature (ex. `feat/demo-playground`), utilise-la comme nom de feature dans les messages de commit.
+3. Si la branche est `playground` ou `develop` (pas de worktree / pas sur une branche de feature), utilise un nom générique : `promote-playground`.
 
-## Pre-flight (both repos)
+## Pré-vol (= vérifications) sur les deux dépôts
 
-For each repo (`front/`, `back/`):
+Pour chaque dépôt (`front/`, `back/`) :
 
-1. Check CI status on the playground branch:
+1. Vérifie l'état de la CI (= les tests automatiques) sur la branche playground :
    ```bash
    gh run list --branch playground --limit 1 --json status,conclusion,name
    ```
-   - If CI is not green (conclusion != "success"), **STOP**:
-     > "La CI n'est pas verte sur playground. Voici les checks en échec :"
-     > (list failing checks)
+   - Si la CI n'est pas verte (`conclusion != "success"`), **STOP** :
+     > "La CI n'est pas verte sur playground. Voici les tests en échec :"
+     > (lister les checks qui plantent)
 
-## Code Review
+## Code Review (= relecture automatique du code)
 
-Before creating the PRs, perform a code review of the diff between `playground` and `develop`:
+Avant de créer les PR, fais une code review du diff (= des différences) entre `playground` et `develop` :
 
-1. For each repo, get the diff:
+1. Pour chaque dépôt, récupère le diff :
    ```bash
    git -C <repo> fetch origin develop playground
    git -C <repo> diff origin/develop..origin/playground
    ```
 
-2. Review the diff using a Sonnet agent. The agent should:
-   - Check for obvious bugs, security issues, and logic errors
-   - Flag anything that looks risky for production
-   - Keep the review concise and actionable
+2. Fais relire le diff par un agent Sonnet. L'agent doit :
+   - Repérer les bugs évidents, les soucis de sécurité, les erreurs de logique.
+   - Signaler tout ce qui paraît risqué pour la production.
+   - Rester concis et actionnable.
 
-3. Present the review to the user:
+3. Présente la review à l'utilisateur :
    > "Voici la review avant de promouvoir sur develop :"
-   > (review results)
+   > (résultats de la review)
 
-4. Ask the user:
+4. Demande à l'utilisateur :
    > "Tu veux continuer avec la PR vers develop ?"
-   - If no → stop.
+   - Si non → on arrête.
 
-## Promote (repeat for front/ and back/)
+## Promotion (à répéter pour front/ puis back/)
 
-For each repo, in sequence (if one fails, abort both):
+Pour chaque dépôt, en séquence (= un après l'autre — si l'un échoue, on annule les deux) :
 
-1. Fetch:
+1. Récupère les dernières versions distantes :
    ```bash
    git -C <repo> fetch origin develop playground
    ```
 
-2. Create a local branch from playground:
+2. Crée une branche locale à partir de playground :
    ```bash
-   git -C <repo> checkout -B promote/<feature-name> origin/playground
+   git -C <repo> checkout -B promote/<nom-feature> origin/playground
    ```
+   (`checkout -B` = crée ou réinitialise une branche.)
 
-3. Squash all commits into a single one on top of develop:
+3. Compresse tous les commits en un seul par-dessus develop :
    ```bash
    git -C <repo> reset --soft origin/develop
-   git -C <repo> commit -m "feat(<feature-name>): promote to develop"
+   git -C <repo> commit -m "feat(<nom-feature>): promote to develop"
    ```
-   - This produces a single clean commit containing all playground changes for this feature.
-   - If there are no changes to commit (playground == develop), skip this repo.
-   - If reset fails, fall back to rebase:
+   - Résultat : un seul commit propre qui contient toutes les modifs playground pour cette feature.
+   - S'il n'y a rien à commiter (playground == develop), saute ce dépôt.
+   - Si le `reset` échoue, retombe sur un `rebase` :
      ```bash
      git -C <repo> rebase origin/develop
      ```
-     - If resolution is too complex (more than 3 files in conflict, or logic is ambiguous), **STOP**:
-       > "Le rebase a des conflits trop complexes dans `<repo>`. Demande à un dev de t'aider. Fichiers en conflit : <list>"
-     - Then abort: `git -C <repo> rebase --abort`
+     - Si la résolution est trop complexe (plus de 3 fichiers en conflit, ou logique ambiguë), **STOP** :
+       > "Le rebase a des conflits trop complexes dans `<repo>`. Demande à un dev de t'aider. Fichiers en conflit : <liste>"
+     - Puis annule : `git -C <repo> rebase --abort`
 
-4. Push:
+4. Pousse sur le serveur distant (force sécurisée) :
    ```bash
-   git -C <repo> push --force-with-lease origin promote/<feature-name>
+   git -C <repo> push --force-with-lease origin promote/<nom-feature>
    ```
 
-5. Create PR:
+5. Crée la PR :
    ```bash
-   gh pr create --base develop --head promote/<feature-name> --title "feat(<feature-name>): promote to develop" --body "<body>"
+   gh pr create --base develop --head promote/<nom-feature> --title "feat(<nom-feature>): promote to develop" --body "<body>"
    ```
-   - **Body**: include the code review summary + list of changes. End with:
+   - **Body** (= description de la PR) : inclure le résumé de la code review + la liste des changements. Termine par :
      ```
      ✅ CI verte sur playground
      ✅ Code review passée
@@ -96,26 +97,26 @@ For each repo, in sequence (if one fails, abort both):
      🤖 Promoted with [Playground Deploy](https://github.com/sommesi/playground-deploy)
      ```
 
-6. Go back to the feature branch:
+6. Reviens sur la branche de feature :
    ```bash
-   git -C <repo> checkout <original-branch>
+   git -C <repo> checkout <branche-originale>
    ```
 
-## On failure
+## En cas d'échec
 
-If any repo fails:
-1. Abort any in-progress rebase: `git -C <repo> rebase --abort`
-2. Clean up the promote branch: `git -C <repo> checkout <original-branch> && git -C <repo> branch -D promote/<feature-name>`
-3. Tell the user what went wrong.
-4. Do NOT continue with the other repo.
+Si un dépôt échoue :
+1. Annule le rebase en cours : `git -C <repo> rebase --abort`.
+2. Nettoie la branche de promotion : `git -C <repo> checkout <branche-originale> && git -C <repo> branch -D promote/<nom-feature>`.
+3. Dis clairement à l'utilisateur ce qui a foiré.
+4. **N'enchaîne pas** sur l'autre dépôt (sinon front et back seraient désynchronisés).
 
-## Output
+## Résultat à afficher
 
 ```
-✅ PRs créées sur develop :
-   - front: <PR_URL>
-   - back: <PR_URL>
+✅ PR créées sur develop :
+   - front : <URL_PR>
+   - back  : <URL_PR>
 
-📋 Review summary:
-   <brief review summary>
+📋 Résumé de la review :
+   <résumé bref de la review>
 ```

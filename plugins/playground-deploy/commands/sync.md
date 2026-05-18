@@ -1,86 +1,88 @@
 ---
 allowed-tools: Bash(git *), Bash(gh *)
-description: Sync playground from develop, optionally update your branch too
+description: Met à jour playground depuis develop, et éventuellement ta branche aussi
 disable-model-invocation: false
 ---
 
-Update playground from develop, then optionally update the current branch.
+Met à jour `playground` (= environnement de test partagé) à partir de `develop` (= branche de référence du code prêt pour la prod), puis propose de mettre à jour la branche courante.
 
-## Detect context
+## Détecter le contexte
 
-1. Detect the worktree root. The worktree contains two repos: `front/` and `back/`.
-2. For each repo, get the current branch: `git -C <repo> branch --show-current`
-3. Check for uncommitted changes: `git -C <repo> status --porcelain`
-   - If dirty, **auto-commit them silently**:
+1. Repère la racine du worktree (= dossier de travail isolé). Il contient deux dépôts : `front/` (interface) et `back/` (serveur).
+2. Pour chaque dépôt, récupère la branche courante : `git -C <repo> branch --show-current`
+3. Vérifie s'il y a des changements non commités : `git -C <repo> status --porcelain`
+   - Si oui, **fais un commit automatique silencieux** (pour ne rien perdre) :
      ```bash
      git -C <repo> add -A
      git -C <repo> commit -m "wip: auto-commit before playground sync"
      ```
-     Inform the user briefly: `"Auto-commit dans <repo>."`
+     Préviens brièvement : `"Auto-commit dans <repo>."`
 
-## Step 1 — Update playground from develop (always)
+## Étape 1 — Mettre playground à jour depuis develop (toujours)
 
-For each repo (`front/`, `back/`):
+Pour chaque dépôt (`front/`, `back/`) :
 
-1. Fetch:
+1. Récupère les dernières versions distantes :
    ```bash
    git -C <repo> fetch origin develop playground
    ```
+   (`fetch` = télécharge les nouveautés du serveur sans toucher à ta copie locale.)
 
-2. Check if playground is behind develop:
+2. Compte le nombre de commits que playground a de retard sur develop :
    ```bash
    git -C <repo> rev-list --count origin/playground..origin/develop
    ```
-   - If 0: playground is up to date, skip this repo.
+   - Si 0 : playground est déjà à jour, on saute ce dépôt.
 
-3. Checkout playground and rebase on develop:
+3. Bascule sur playground et rejoue les commits de playground par-dessus develop (= rebase) :
    ```bash
    git -C <repo> checkout playground
    git -C <repo> rebase origin/develop
    ```
-   - Conflicts: resolve freely.
+   - En cas de conflits : résous-les librement.
 
-4. Push:
+4. Pousse sur le serveur distant en écrasant la version précédente (de façon sécurisée) :
    ```bash
    git -C <repo> push --force-with-lease origin playground
    ```
+   (`--force-with-lease` = écrase la branche distante seulement si personne d'autre n'a poussé entre-temps — plus sûr qu'un `--force` brutal.)
 
-5. Go back to original branch:
+5. Reviens sur la branche d'origine :
    ```bash
-   git -C <repo> checkout <original_branch>
+   git -C <repo> checkout <branche_originale>
    ```
 
-Report:
+Rapport à afficher :
 ```
-🔄 Playground mis à jour :
-   - front: +N commits depuis develop
-   - back: déjà à jour
+🔄 Playground mise à jour :
+   - front : +N commits depuis develop
+   - back  : déjà à jour
 ```
 
-## Step 2 — Update current branch (ask first)
+## Étape 2 — Mettre à jour la branche courante (demander avant)
 
-Ask the user:
-> "Tu veux aussi mettre ta branche `<branch>` à jour par rapport à playground ?"
+Demande à l'utilisateur :
+> "Tu veux aussi mettre ta branche `<branche>` à jour par rapport à playground ?"
 
-If yes, for each repo:
+Si oui, pour chaque dépôt :
 
-1. Rebase on updated playground:
+1. Rejoue ta branche par-dessus la playground mise à jour :
    ```bash
    git -C <repo> rebase origin/playground
    ```
-   - Conflicts: resolve freely.
+   - En cas de conflits : résous-les librement.
 
-2. Push:
+2. Pousse ta branche (force sécurisée) :
    ```bash
-   git -C <repo> push --force-with-lease origin <branch>
+   git -C <repo> push --force-with-lease origin <branche>
    ```
 
-Report:
+Rapport :
 ```
-✅ Branche `<branch>` à jour :
-   - front: rebasée sur playground
-   - back: rebasée sur playground
+✅ Branche `<branche>` à jour :
+   - front : rebasée sur playground
+   - back  : rebasée sur playground
 ```
 
-If no, say:
-> "OK, playground est à jour. Ta branche reste comme elle est."
+Si non, dis :
+> "OK, playground est à jour. Ta branche reste en l'état."
