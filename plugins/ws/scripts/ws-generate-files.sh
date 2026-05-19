@@ -8,6 +8,17 @@
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
+# --- Timing helper (debug) ---
+WS_T0=$(python3 -c 'import time; print(int(time.time()*1000))')
+WS_TLAST=$WS_T0
+t() {
+  local now
+  now=$(python3 -c 'import time; print(int(time.time()*1000))')
+  printf '[Δ %5dms │ Σ %6dms] ws-generate-files: %s\n' "$((now - WS_TLAST))" "$((now - WS_T0))" "$*" >&2
+  WS_TLAST=$now
+}
+t "start"
+
 WS_PATH="$1"
 SLOT="$2"
 BRANCH="$3"
@@ -94,6 +105,7 @@ fi
 
 # Defaults if no config
 REPO_COUNT=${REPO_COUNT:-0}
+t "config parsed (REPO_COUNT=$REPO_COUNT)"
 
 # --- 1. CLAUDE.local.md ---
 REPOS_LIST=""
@@ -157,6 +169,7 @@ same topic, write a follow-up rather than duplicating.
 
 CLAUDEEOF
 echo "  ✓ CLAUDE.local.md"
+t "CLAUDE.local.md written"
 
 # --- 2. .worktree-env.sh ---
 cat > "$WS_PATH/.worktree-env.sh" << 'ENVEOF'
@@ -178,6 +191,7 @@ B64=\$(echo -n "\$TITLE" | base64)
 printf '\033]1337;SetUserVar=panetitle=%s\007' "\$B64"
 ENVEOF2
 echo "  ✓ .worktree-env.sh"
+t ".worktree-env.sh written"
 
 # --- 3. .vscode/settings.json per repo (merge if exists) ---
 if [ "$REPO_COUNT" -gt 0 ]; then
@@ -222,6 +236,7 @@ VSCEOF
     echo "  ✓ ${REPO_NAMES[$i]}/.vscode/settings.json"
   done
 fi
+t ".vscode/settings.json done ($REPO_COUNT repo(s))"
 
 # --- 4. .code-workspace (multi-repo only) ---
 if [ "$REPO_COUNT" -gt 1 ]; then
@@ -249,6 +264,7 @@ with open(f'$WS_PATH/{slug}.code-workspace', 'w') as f:
 "
   echo "  ✓ $SLUG.code-workspace"
 fi
+t ".code-workspace done"
 
 # --- 5. .env.local per repo (copy from origin + substitute ports) ---
 if [ -n "$CONFIG" ] && [ "$REPO_COUNT" -gt 0 ]; then
@@ -395,5 +411,7 @@ for r in repos:
             print(f'  ✓ {repo_name}/scripts/db/.env (from origin)')
 PYEOF
 fi
+t ".env.local + creds + scripts/db/.env done"
 
 echo "  ✓ All files generated"
+t "DONE"

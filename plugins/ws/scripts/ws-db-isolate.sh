@@ -15,6 +15,18 @@
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
+# --- Timing helper (debug) ---
+WS_T0=$(python3 -c 'import time; print(int(time.time()*1000))')
+WS_TLAST=$WS_T0
+t() {
+  local now
+  now=$(python3 -c 'import time; print(int(time.time()*1000))')
+  printf '[Δ %5dms │ Σ %6dms] ws-db-isolate: %s\n' "$((now - WS_TLAST))" "$((now - WS_T0))" "$*" >&2
+  WS_TLAST=$now
+}
+export WS_T0
+t "start"
+
 usage() {
   cat >&2 <<EOF
 Usage: ws-db-isolate.sh [<workspace_path> <slot>]
@@ -97,6 +109,7 @@ for s, w in reg.get('workspaces', {}).items():
 fi
 
 [ -z "$CONFIG" ] && { echo "  (skipped: no config found)"; exit 0; }
+t "config located ($CONFIG)"
 
 # Source shell profile for full PATH (bun, nvm, rbenv, bundler, etc.)
 # Temporarily disable -u/-e: user profiles reference unset vars that would
@@ -106,9 +119,10 @@ fi
 set +ue
 source "$HOME/.zshrc" 2>/dev/null || source "$HOME/.bashrc" 2>/dev/null || true
 set -ue
+t "shell profile sourced (zshrc/bashrc)"
 
-WS_PATH="$WS_PATH" SLOT="$SLOT" CONFIG="$CONFIG" python3 << 'PYEOF'
-import json, os, re, subprocess, sys
+WS_PATH="$WS_PATH" SLOT="$SLOT" CONFIG="$CONFIG" WS_T0="$WS_T0" python3 << 'PYEOF'
+import json, os, re, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, urlunparse
 
@@ -118,6 +132,13 @@ config = json.load(open(os.environ['CONFIG']))
 repos = config.get('repos', [])
 hooks = config.get('hooks', {}) or {}
 db_create_hook = hooks.get('db_create')
+
+# --- Timing helper (mirror bash format, writes to stderr) ---
+_T0_MS = int(os.environ.get('WS_T0', '0')) or int(time.time() * 1000)
+def _tlog(repo_name, msg):
+    now = int(time.time() * 1000)
+    sys.stderr.write(f'[Δ ----- │ Σ {now - _T0_MS:6d}ms] ws-db-isolate[{repo_name}]: {msg}\n')
+    sys.stderr.flush()
 
 # Any env var that looks like a DB connection URL.
 # Rule: ALL_CAPS key that contains DATABASE and ends with _URL.
@@ -358,10 +379,12 @@ def process_repo(r):
         return (repo_name, '', 0, False)
 
     print(f'  → {repo_name}: isolating databases', file=buf)
+    _tlog(repo_name, 'start (has_url=%s has_rails=%s)' % (has_url, has_rails))
 
     for ef in (env_local, env_main):
         if rewrite_env_local(ef, slot):
             print(f'    ✓ {os.path.basename(ef)} rewritten', file=buf)
+    _tlog(repo_name, 'env files rewritten')
 
     # Rewrite config/database.yml — secondary DBs (cache/queue/cable) are not
     # overridden by DATABASE_URL, so their hardcoded names must be suffixed.
@@ -380,6 +403,7 @@ def process_repo(r):
         cmd = db_create_hook.replace('$SLOT', str(slot))
         cmd = cmd.replace('$WORKSPACE_PATH', ws_path)
         print(f'    → running db_create hook', file=buf)
+        _tlog(repo_name, 'running custom db_create hook')
         proc = subprocess.run(
             ['/bin/bash', '-lc', cmd], cwd=repo_path,
             capture_output=True, text=True,
@@ -387,6 +411,7 @@ def process_repo(r):
         buf.write(proc.stdout)
         buf.write(proc.stderr)
         rc = proc.returncode
+        _tlog(repo_name, f'db_create hook done (exit {rc})')
         if rc != 0:
             print(f'    ✗ db_create hook failed (exit {rc})', file=buf)
     else:
@@ -403,7 +428,9 @@ def process_repo(r):
         # created on the fly by Rails when needed and are usually empty anyway.
         primary_url = urls.get('DATABASE_URL') or next(iter(urls.values()), None)
         if primary_url:
+            _tlog(repo_name, 'TEMPLATE clone: starting psql')
             ok, msg = clone_local_pg(primary_url, slot)
+            _tlog(repo_name, f'TEMPLATE clone: {"OK" if ok else "FAIL"} ({msg})')
             if ok:
                 print(f'    ✓ cloned via TEMPLATE: {msg}', file=buf)
                 cloned = True
@@ -413,6 +440,7 @@ def process_repo(r):
         if not cloned:
             if has_rails and os.path.isfile(os.path.join(repo_path, 'bin', 'rails')):
                 print(f'    → fallback: bin/rails db:create db:schema:load', file=buf)
+                _tlog(repo_name, 'fallback: bin/rails db:create db:schema:load (SLOW — Rails boot)')
                 proc = subprocess.run(
                     ['/bin/bash', '-lc', 'bin/rails db:create db:schema:load'],
                     cwd=repo_path, capture_output=True, text=True,
@@ -420,10 +448,12 @@ def process_repo(r):
                 buf.write(proc.stdout)
                 buf.write(proc.stderr)
                 rc = proc.returncode
+                _tlog(repo_name, f'Rails db:create done (exit {rc})')
                 if rc != 0:
                     print(f'    ✗ Rails db:create failed (exit {rc})', file=buf)
             else:
                 print(f'    (no rails fallback — URLs updated, DB creation skipped)', file=buf)
+                _tlog(repo_name, 'no DB creation step')
 
     if rc == 0:
         print(f'    ✓ {repo_name} done', file=buf)
@@ -432,11 +462,13 @@ def process_repo(r):
 
 # Fan-out across repos — each repo's db:create runs concurrently.
 # Most time is waiting on a remote Postgres, so threads are fine.
+_tlog('*', f'fan-out: {len(repos)} repo(s)')
 results = []
 with ThreadPoolExecutor(max_workers=max(1, len(repos))) as pool:
     futures = [pool.submit(process_repo, r) for r in repos]
     for f in as_completed(futures):
         results.append(f.result())
+_tlog('*', 'fan-in: all repos done')
 
 # Stream logs in a stable (config) order.
 by_name = {name: (log, rc, did) for (name, log, rc, did) in results}

@@ -197,65 +197,24 @@ Wait for the user's response. Accept: `y`, `yes`, `o`, `oui`, or empty (just Ent
 
 ## Step 6 — Create the workspace
 
-Execute the following sub-steps in order. If any step fails, stop immediately, display the error, and clean up (see below).
+### 6a–6d — Orchestrated creation (1 single script call)
 
-### 6a — Create worktrees (1 script call)
-
-Run the orchestration script — it handles `mkdir -p`, git worktree with automatic fallback (new branch / existing local / existing remote), and the base-branch pull for every repo. Repos are cloned **in parallel** internally:
+Run the orchestrator. It chains **worktree creation → file generation → DB isolation → post_create hook** in a single bash process. This collapses what used to be 4 separate tool calls into one, eliminating the 30s–60s of LLM ping-pong overhead per inter-step transition (was the dominant cost — minutes saved).
 
 ```bash
-/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-worktree-create.sh" "<workspace_path>" "<branch>" "<git_root>"
+/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-create.sh" \
+  "<workspace_path>" "<slot>" "<branch>" "<color>" "<emoji>" "<git_root>" "<spec>" "<goal>"
 ```
 
-If this exits non-zero, stop and clean up (see Rules below).
+What the orchestrator does internally:
+- **6a** — `ws-worktree-create.sh`: parallel `git worktree add` per repo, plus base-branch pull. Fails LOUDLY now if all 3 add-attempts fail (e.g. ref-collision like `feat/ats` blocking `feat/ats/sub`).
+- **6b** — `ws-generate-files.sh`: CLAUDE.local.md, .worktree-env.sh, .vscode/settings.json, .code-workspace, .env.local with port substitution, Rails credentials (`config/master.key`, `config/credentials/*.key`). See references/generated-files.md.
+- **6c** — `ws-db-isolate.sh`: rewrites local `DATABASE_URL` / `CACHE_DATABASE_URL` / etc. to `<name>_w<slot>` (remote hosts left alone), mirrors into `scripts/db/.env`, and clones the local source DB via `CREATE DATABASE … TEMPLATE`. Fallback to `bin/rails db:create db:schema:load` if no source DB exists locally. Honors `hooks.db_create` if defined.
+- **6d** — runs `hooks.post_create` with variable substitution: `$SLOT`, `$BRANCH`, `$SLUG`, `$PORT` (first repo's port), `$WORKSPACE_PATH`. Shell profile sourced so `bundle`/`bun`/`nvm`/`rbenv` are in PATH.
 
-### 6b — Generate workspace files (1 script call)
+**On failure** the orchestrator self-cleans (removes any partial worktrees, deletes `$WS_PATH`) and exits non-zero. **Do NOT update the registry** in that case — stop and report the error to the user. The script prints timing logs to stderr (`[Δ Nms │ Σ Nms]`) so you can see exactly which sub-step blew up.
 
-Run `ws-generate-files.sh` — it handles CLAUDE.local.md, .worktree-env.sh, .vscode/settings.json per repo, .code-workspace, .env.local with port substitution, **and copies Rails credentials** (`config/master.key`, `config/credentials/*.key`) so the new worktree can boot without manual setup:
-
-```bash
-CONFIG="<config_path>" PROJECT_ROOT="<git_root>" /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-generate-files.sh" "<workspace_path>" "<slot>" "<branch>" "<color>" "<emoji>" "worktree" "<spec>" "<goal>"
-```
-
-See references/generated-files.md for details on what gets generated.
-
-### 6c — Database isolation (1 script call)
-
-Run `ws-db-isolate.sh` — it:
-1. Rewrites all local DB URLs (`DATABASE_URL`, `CACHE_DATABASE_URL`, `QUEUE_DATABASE_URL`, `CABLE_DATABASE_URL`) in `.env.local`/`.env` to `<name>_w<slot>`. Remote hosts (staging/prod) are left untouched.
-2. Mirrors the isolated `.env.local` into `scripts/db/.env` when that dir exists.
-3. **Clones the local source DB into the isolated DB** via `CREATE DATABASE ... TEMPLATE` (quasi-instantané, copie fichier sur le même serveur Postgres — la workspace démarre avec la vraie data locale, pas un schéma vide). Falls back to `bin/rails db:create db:schema:load` if the source DB doesn't exist locally. A custom `db_create` hook overrides the default.
-4. Pulling **staging** data is **not** done here — c'est plus lent et pas toujours voulu. Utiliser une skill dédiée à la demande.
-
-Repos are processed **in parallel**:
-
-```bash
-/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-db-isolate.sh" "<workspace_path>" "<slot>"
-```
-
-Silent no-op when no database is detected.
-
-### 6d — Execute post_create hook
-
-If `hooks.post_create` is defined in the config, run it with variable substitution:
-- `$SLOT` → slot number
-- `$BRANCH` → branch name
-- `$SLUG` → workspace slug
-- `$PORT` → port for the first repo
-- `$WORKSPACE_PATH` → workspace root path (with `~` expanded to `$HOME`)
-
-```bash
-# Source shell profile to get full PATH (bun, nvm, rbenv, etc.)
-source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
-eval "<hook_command_with_substitutions>"
-```
-
-**If the hook exits non-zero:**
-1. Display the error output.
-2. Clean up: `git worktree remove --force` for each repo, then `rm -rf <workspace_path>`.
-3. Stop — do NOT update the registry.
-
-Note: `db_create` is handled by `ws-db-isolate.sh` in Step 6c — do not re-run it here.
+Staging data is **not** pulled here — that's a separate on-demand skill.
 
 ### 6e — Update registry
 

@@ -54,11 +54,22 @@ git -C <repo_path> ls-remote --heads origin <branch> | wc -l
 
 ### Check 1 — Uncommitted files
 
-If `git status --short` output is not empty for any repo, show the user the list of uncommitted files and require explicit confirmation:
+Take the output of `git status --short` and **filter out** these well-known transient files that are always present in worktrees and whose loss is expected (do not show them, do not prompt for them):
 
-> ⚠️ You have uncommitted files in `<repo_name>`: `<list>`. These will be LOST. Continue? [y/N]
+- `.env.local`
+- `.env.local.*` (e.g. `.env.local.bak`)
+- `.vscode/` (any path under it)
+- `.idea/` (any path under it)
+- `.DS_Store`
 
-Default is **NO**. Only proceed if the user explicitly answers `y` or `yes`.
+Only the **remaining** entries (modifications to tracked files, or other untracked files) count as "uncommitted files".
+
+- If the filtered list is empty → **no prompt**, continue silently.
+- Otherwise, show the user only the filtered list and require explicit confirmation:
+
+  > ⚠️ You have uncommitted files in `<repo_name>`: `<filtered list>`. These will be LOST. Continue? [y/N]
+
+  Default is **NO**. Only proceed if the user explicitly answers `y` or `yes`.
 
 ### Check 2 — Unmerged branch (worktree mode only)
 
