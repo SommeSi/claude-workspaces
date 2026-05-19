@@ -1,7 +1,7 @@
 {
   "name": "playground-deploy",
-  "version": "2.0.0",
-  "description": "Déploie ta branche sur playground (/preview) ou remet playground à zéro = copie de develop (/clean). Zéro connaissance git.",
+  "version": "2.1.0",
+  "description": "Déploie ta branche sur playground (/preview), remet playground à zéro = copie de develop (/clean), ou pousse tes données locales sur playground (/push-data). Zéro connaissance git ni Postgres.",
   "author": {
     "name": "sommesi"
   },
