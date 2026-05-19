@@ -28,8 +28,8 @@
     },
     {
       "name": "playground-deploy",
-      "description": "Deploy to playground and promote to develop — zero git knowledge required",
-      "version": "1.6.0",
+      "description": "Déploie ta branche sur playground (/preview) ou remet playground à zéro = copie de develop (/clean). Zéro connaissance git.",
+      "version": "2.0.0",
       "author": {
         "name": "sommesi"
       },

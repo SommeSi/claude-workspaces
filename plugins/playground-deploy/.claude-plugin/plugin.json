@@ -1,11 +1,11 @@
 {
   "name": "playground-deploy",
-  "version": "1.7.0",
-  "description": "Déploie sur playground et promeut vers develop — zéro connaissance git requise.",
+  "version": "2.0.0",
+  "description": "Déploie ta branche sur playground (/preview) ou remet playground à zéro = copie de develop (/clean). Zéro connaissance git.",
   "author": {
     "name": "sommesi"
   },
   "repository": "https://github.com/sommesi/claude-workspaces",
   "license": "MIT",
-  "keywords": ["deploy", "playground", "develop"]
+  "keywords": ["deploy", "playground"]
 }
