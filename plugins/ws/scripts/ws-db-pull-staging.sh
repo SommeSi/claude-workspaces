@@ -110,6 +110,19 @@ for r in repos:
     did_anything = True
     print(f'→ {name}:')
 
+    # Resolution order:
+    #   1. Explicit `hooks.db_pull_staging` in config → run as-is.
+    #   2. Project's own `scripts/db/pull_db.sh` → delegate. This is the
+    #      blessed path for repos that have it (e.g. backend-sommesi-app):
+    #      it auto-detects LOCAL_DB_NAME from DATABASE_URL (so the worktree's
+    #      isolated DB is targeted), reads creds from scripts/db/.env in
+    #      decomposed form (STAGING_DB_HOST/PORT/USER/PASS/NAME), re-encrypts
+    #      FEATURE_ENCRYPTION_KEY, and runs db:migrate. Re-implementing all
+    #      that here would just duplicate (and lag behind) the team's script.
+    #   3. Fallback: `pg_dump $STAGING_DATABASE_URL | psql $DATABASE_URL`,
+    #      requires a single URL var in .env.local.
+    project_pull_db = os.path.join(repo_path, 'scripts', 'db', 'pull_db.sh')
+
     if pull_hook:
         cmd = pull_hook.replace('$SLOT', str(slot))
         cmd = cmd.replace('$WORKSPACE_PATH', ws_path)
@@ -120,10 +133,25 @@ for r in repos:
             print(f'    ✗ hook failed (exit {rc})', file=sys.stderr)
             exit_code = rc
             continue
+    elif os.path.isfile(project_pull_db) and os.access(project_pull_db, os.X_OK):
+        print(f'    delegating to scripts/db/pull_db.sh staging')
+        # SKIP_CONFIRM=1 — we're already in a workspace-scoped context, the
+        # outer skill will have asked the user. Pass DEBUG=1 only if the
+        # caller already set it.
+        env = os.environ.copy()
+        env['SKIP_CONFIRM'] = '1'
+        rc = subprocess.call(
+            ['/bin/bash', project_pull_db, 'staging'],
+            cwd=repo_path, env=env,
+        )
+        if rc != 0:
+            print(f'    ✗ scripts/db/pull_db.sh failed (exit {rc})', file=sys.stderr)
+            exit_code = rc
+            continue
     else:
         # Default: pg_dump staging | psql target
         if not staging_url:
-            print(f'    ↷ no STAGING_DATABASE_URL and no db_pull_staging hook — skipped')
+            print(f'    ↷ no STAGING_DATABASE_URL, no scripts/db/pull_db.sh, no db_pull_staging hook — skipped')
             continue
         try:
             tgt = urlparse(target_url)

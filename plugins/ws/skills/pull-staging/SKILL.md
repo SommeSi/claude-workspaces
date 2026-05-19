@@ -28,11 +28,13 @@ On failure (non-zero exit), surface the error message from the script — don't 
 
 ## How it works (for reference)
 
-For each repo:
-1. Read `.env.local` to get `DATABASE_URL` (target — isolated, suffixed `_w<slot>`) and `STAGING_DATABASE_URL` (source).
-2. Safety check: target must have the `_w<slot>` suffix. If not, refuse — we never touch a non-isolated DB.
-3. `pg_dump --clean --if-exists --no-owner --no-acl <staging> | psql <target>` in one pipe — no intermediate file.
-4. If the project defines a `hooks.db_pull_staging` in `.claude-workspaces.json`, use that instead (gives the project full control over dump flags, filtering, anonymization, etc.).
+For each repo, the script tries the following resolution order — first match wins:
+
+1. **`hooks.db_pull_staging`** in `.claude-workspaces.json` — full control over dump flags, filtering, anonymization, re-encryption.
+2. **`scripts/db/pull_db.sh staging`** (the project's own script) — invoked with `SKIP_CONFIRM=1`. Used when the project ships its own blessed pull tool (e.g. backend-sommesi-app, which auto-detects `LOCAL_DB_NAME` from `DATABASE_URL`, reads creds from `scripts/db/.env` in decomposed form `STAGING_DB_HOST/PORT/USER/PASS/NAME`, re-encrypts `FEATURE_ENCRYPTION_KEY`, and runs `db:migrate`).
+3. **Fallback** — `pg_dump --clean --if-exists --no-owner --no-acl $STAGING_DATABASE_URL | psql $DATABASE_URL` in one pipe. Requires a single `STAGING_DATABASE_URL` env var in `.env.local`.
+
+Safety check (every path): the target DB name must end with `_w<slot>`. If not, the script refuses — we never touch a non-isolated DB.
 
 ## Config — custom hook (optional)
 
