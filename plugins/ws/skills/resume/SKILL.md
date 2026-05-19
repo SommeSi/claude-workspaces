@@ -80,6 +80,22 @@ Run the color script (instant):
 
 ---
 
+## Step 4.5 — Verify DB isolation hasn't drifted (worktree / attached modes)
+
+Skip when `mode == sandbox` — sandboxes have no DB isolation to verify.
+
+The rewrites applied by `ws-db-isolate.sh` at workspace-creation time (suffixed names in `config/database.yml`, suffixed URLs in `.env.local`) are **uncommitted** changes on tracked files. They can silently revert after a `git pull`, `git checkout -- config/...`, `bin/setup`, or any tool that regenerates DB config. When that happens, the worktree's `bin/jobs` / `bin/dev` ends up connecting to the **non-isolated** queue/cable/cache DBs and steals jobs from `develop` (or from another worktree). That's the "jobs got picked up by the wrong process" bug.
+
+Run the verification script — it's idempotent, fast, and **never touches actual DB data**. It only rewrites file content if drift is detected:
+
+```bash
+/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-db-verify.sh"
+```
+
+If the output contains any `✗→✓ re-isolated` line, mention it in your Step 5 summary (e.g. "⚠️ DB isolation had drifted on `back/config/database.yml` — auto-fixed. Restart `bin/dev` / `bin/jobs` to pick it up."). Otherwise stay silent on this step — clean state is the normal case and shouldn't add noise to the summary.
+
+---
+
 ## Step 5 — Display summary (5–7 lines MAX)
 
 ```
