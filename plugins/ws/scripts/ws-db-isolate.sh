@@ -199,8 +199,11 @@ def rewrite_env_local(env_file: str, slot: int) -> bool:
                     continue
             out.append(line)
     if changed:
+        content = '\n'.join(out)
+        if not content.endswith('\n'):
+            content += '\n'
         with open(env_file, 'w') as f:
-            f.write('\n'.join(out))
+            f.write(content)
     return changed
 
 
@@ -422,22 +425,22 @@ def process_repo(r):
         #
         # Fallback: if the source DB doesn't exist locally (fresh checkout) we
         # fall back to Rails' empty-schema init so the workspace still boots.
-        cloned = False
+        cloned_any = False
         urls = read_db_urls(env_local) or read_db_urls(env_main)
-        # Only clone the primary URL — secondary (cache/queue/cable) DBs are
-        # created on the fly by Rails when needed and are usually empty anyway.
-        primary_url = urls.get('DATABASE_URL') or next(iter(urls.values()), None)
-        if primary_url:
-            _tlog(repo_name, 'TEMPLATE clone: starting psql')
-            ok, msg = clone_local_pg(primary_url, slot)
-            _tlog(repo_name, f'TEMPLATE clone: {"OK" if ok else "FAIL"} ({msg})')
+        # Clone ALL DB URLs (primary + secondary like cache/queue/cable).
+        # Rails does NOT auto-create secondary databases — it crashes with
+        # ActiveRecord::NoDatabaseError if they're missing.
+        for url_key, url_val in urls.items():
+            _tlog(repo_name, f'TEMPLATE clone {url_key}: starting psql')
+            ok, msg = clone_local_pg(url_val, slot)
+            _tlog(repo_name, f'TEMPLATE clone {url_key}: {"OK" if ok else "FAIL"} ({msg})')
             if ok:
-                print(f'    ✓ cloned via TEMPLATE: {msg}', file=buf)
-                cloned = True
+                print(f'    ✓ cloned {url_key} via TEMPLATE: {msg}', file=buf)
+                cloned_any = True
             else:
-                print(f'    ↷ TEMPLATE clone skipped ({msg})', file=buf)
+                print(f'    ↷ {url_key} clone skipped ({msg})', file=buf)
 
-        if not cloned:
+        if not cloned_any:
             if has_rails and os.path.isfile(os.path.join(repo_path, 'bin', 'rails')):
                 print(f'    → fallback: bin/rails db:create db:schema:load', file=buf)
                 _tlog(repo_name, 'fallback: bin/rails db:create db:schema:load (SLOW — Rails boot)')
