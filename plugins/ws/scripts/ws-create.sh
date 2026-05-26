@@ -19,7 +19,7 @@
 #   ws-create.sh <workspace_path> <slot> <branch> <color> <emoji> <project_root> [spec] [goal]
 
 set -euo pipefail
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH="$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 usage() {
   cat >&2 <<EOF
