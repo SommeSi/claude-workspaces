@@ -182,8 +182,18 @@ PYEOF
   # Source shell profile so the hook has access to bundle/bun/nvm/rbenv.
   # See ws-db-isolate.sh for the same dance — user profiles often reference
   # unset vars and would kill the script under set -ue.
+  #
+  # CRITICAL: disarm the ERR trap around the source. Sourcing a zsh .zshrc
+  # under bash makes `source $ZSH/oh-my-zsh.sh` do `return 1` (oh-my-zsh
+  # refuses to load outside zsh). An ERR trap fires on that non-zero return
+  # EVEN with errexit off (`set +ue` disables -e but does NOT disarm the
+  # trap), so cleanup_on_failure would run and silently nuke the whole
+  # workspace — and the 2>/dev/null below hides every trace of it. Drop the
+  # trap for the duration of the source, then restore it.
   set +ue
+  trap - ERR
   source "$HOME/.zshrc" 2>/dev/null || source "$HOME/.bashrc" 2>/dev/null || true
+  trap cleanup_on_failure ERR
   set -ue
   t "shell profile sourced"
 
