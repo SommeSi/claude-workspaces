@@ -179,23 +179,18 @@ PYEOF
 
   echo "  → post_create: $CMD" >&2
 
-  # Source shell profile so the hook has access to bundle/bun/nvm/rbenv.
-  # See ws-db-isolate.sh for the same dance — user profiles often reference
-  # unset vars and would kill the script under set -ue.
-  #
-  # CRITICAL: disarm the ERR trap around the source. Sourcing a zsh .zshrc
-  # under bash makes `source $ZSH/oh-my-zsh.sh` do `return 1` (oh-my-zsh
-  # refuses to load outside zsh). An ERR trap fires on that non-zero return
-  # EVEN with errexit off (`set +ue` disables -e but does NOT disarm the
-  # trap), so cleanup_on_failure would run and silently nuke the whole
-  # workspace — and the 2>/dev/null below hides every trace of it. Drop the
-  # trap for the duration of the source, then restore it.
-  set +ue
-  trap - ERR
-  source "$HOME/.zshrc" 2>/dev/null || source "$HOME/.bashrc" 2>/dev/null || true
-  trap cleanup_on_failure ERR
-  set -ue
-  t "shell profile sourced"
+  # Add common tool shims to PATH instead of sourcing ~/.zshrc (which can
+  # exec zsh or set traps that crash bash).
+  for p in "$HOME/.rbenv/shims" "$HOME/.rbenv/bin" "$HOME/.bun/bin" \
+           "$HOME/.cargo/bin" "$HOME/.yarn/bin"; do
+    [ -d "$p" ] && export PATH="$p:$PATH"
+  done
+  # nvm: find the latest installed node version
+  if [ -d "$HOME/.nvm/versions/node" ]; then
+    _nvm_node=$(ls "$HOME/.nvm/versions/node/" 2>/dev/null | sort -V | tail -1)
+    [ -n "$_nvm_node" ] && export PATH="$HOME/.nvm/versions/node/$_nvm_node/bin:$PATH"
+  fi
+  t "PATH shimmed (no zshrc source)"
 
   eval "$CMD"
   t "post_create done"
@@ -203,6 +198,76 @@ else
   t "no post_create hook (skipping)"
 fi
 
+# Steps 6e/6f are post-success — don't let a registry/color failure nuke
+# the fully-created workspace.
+trap - ERR
+
+t "── 6e: registry update ──"
+REPOS_JSON="${REPOS_JSON:-}"
+SLUG=$(echo "$BRANCH" | tr '/' '-')
+CONFIG="$CONFIG" SLOT="$SLOT" WS_PATH="$WS_PATH" SLUG="$SLUG" BRANCH="$BRANCH" \
+  COLOR="$COLOR" EMOJI="$EMOJI" PROJECT_ROOT="$PROJECT_ROOT" \
+  REPOS_JSON="$REPOS_JSON" python3 - <<'PYEOF' || echo "⚠️  registry update failed (workspace still usable)" >&2
+import json, os, tempfile, shutil
+from datetime import datetime, timezone
+
+reg_path = os.path.expanduser('~/.claude-workspaces/registry.json')
+os.makedirs(os.path.dirname(reg_path), exist_ok=True)
+
+if os.path.isfile(reg_path):
+    with open(reg_path) as f:
+        registry = json.load(f)
+else:
+    registry = {"workspaces": {}, "next_slot": 1}
+
+slot = os.environ['SLOT']
+cfg = json.load(open(os.environ['CONFIG']))
+port_step = cfg.get('port_step', 10)
+
+repos_json = os.environ.get('REPOS_JSON', '')
+if repos_json:
+    repos = json.loads(repos_json)
+else:
+    repos = []
+    for r in cfg.get('repos', []):
+        port = r.get('port_base', 3000) + int(slot) * port_step
+        repos.append({
+            "name": r['name'],
+            "path": os.path.join(os.environ['WS_PATH'], r['name']),
+            "port": port,
+        })
+
+registry['workspaces'][slot] = {
+    "slug": os.environ['SLUG'],
+    "mode": "worktree",
+    "branch": os.environ['BRANCH'],
+    "color": os.environ['COLOR'],
+    "emoji": os.environ['EMOJI'],
+    "created_at": datetime.now(timezone.utc).isoformat(),
+    "project_root": os.environ['PROJECT_ROOT'],
+    "workspace_path": os.environ['WS_PATH'],
+    "repos": repos,
+}
+
+next_slot = max(int(k) for k in registry['workspaces']) + 1
+registry['next_slot'] = next_slot
+
+# Atomic write
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(reg_path), suffix='.tmp')
+with os.fdopen(fd, 'w') as f:
+    json.dump(registry, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+shutil.move(tmp, reg_path)
+PYEOF
+t "registry updated"
+
+# ---------------------------------------------------------------------------
+# Step 6f — terminal color
+# ---------------------------------------------------------------------------
+t "── 6f: terminal color ──"
+/bin/bash "$SCRIPT_DIR/ws-color.sh" "$WS_PATH" 2>/dev/null || true
+t "color applied"
+
 t "DONE — workspace ready at $WS_PATH"
 echo "" >&2
-echo "✓ ws-create finished. Update registry (6e) + color terminal (6f) next." >&2
+echo "✓ ws-create finished (registry updated, terminal colored)." >&2
