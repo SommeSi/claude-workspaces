@@ -18,26 +18,29 @@ else
   exit 1
 fi
 
-# --- Find workspace from PWD or argument ---
-WS_PATH="${1:-}"
-if [ -z "$WS_PATH" ]; then
-  if [ ! -f "$REGISTRY" ]; then
-    echo "❌ No registry found" >&2
-    exit 1
-  fi
+# --- Find workspace via registry (lookup uses arg if provided, else cwd) ---
+LOOKUP_PATH="${1:-$(pwd)}"
 
-  eval "$(python3 -c "
+if [ ! -f "$REGISTRY" ]; then
+  echo "❌ No registry found at $REGISTRY" >&2
+  exit 1
+fi
+
+eval "$(LOOKUP_PATH="$LOOKUP_PATH" REGISTRY="$REGISTRY" python3 -c "
 import json, os
-reg = json.load(open('$REGISTRY'))
-cwd = os.getcwd()
+reg = json.load(open(os.environ['REGISTRY']))
+lookup = os.path.realpath(os.environ['LOOKUP_PATH'])
 best_len = 0
 best = None
 for slot, ws in reg.get('workspaces', {}).items():
     wp = ws.get('workspace_path', '')
     paths = [wp] + [r.get('path', '') for r in ws.get('repos', [])]
     for p in paths:
-        if p and cwd.startswith(p) and len(p) > best_len:
-            best_len = len(p)
+        if not p:
+            continue
+        p_real = os.path.realpath(p)
+        if (lookup == p_real or lookup.startswith(p_real + os.sep)) and len(p_real) > best_len:
+            best_len = len(p_real)
             best = ws
             best['slot'] = slot
 if best:
@@ -48,9 +51,8 @@ if best:
     print(f'WS_COLOR={best.get(\"color\", \"\")!r}')
     print(f'WS_PROJECT_ROOT={best.get(\"project_root\", \"\")!r}')
 else:
-    print('echo \"❌ No workspace found for current directory\" >&2; exit 1')
+    print(f'echo \"❌ No workspace found matching {lookup!r}\" >&2; exit 1')
 ")"
-fi
 
 # --- Load project config ---
 CONFIG_FILE=""
