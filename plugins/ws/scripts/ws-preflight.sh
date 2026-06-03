@@ -84,7 +84,12 @@ port_step = config.get('port_step', 10)
 repos_with_ports = []
 for r in config.get('repos', []):
     port = r.get('port_base', 3000) + (slot * port_step)
-    repos_with_ports.append({"name": r['name'], "port": port, "port_base": r.get('port_base', 3000)})
+    repos_with_ports.append({
+        "name": r['name'],
+        "port": port,
+        "port_base": r.get('port_base', 3000),
+        "optional": bool(r.get('optional', False)),
+    })
 
 result = {
     "git_root": project_root,

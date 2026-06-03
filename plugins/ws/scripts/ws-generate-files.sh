@@ -79,6 +79,10 @@ import json, os
 
 config = json.load(open(os.environ['CONFIG']))
 repos = config.get('repos', [])
+# Drop optional repos not opted in (WS_INCLUDE) so the generated
+# CLAUDE.local.md repo list and .code-workspace match what actually exists.
+include = set(n.strip() for n in os.environ.get('WS_INCLUDE', '').split(',') if n.strip())
+repos = [r for r in repos if not r.get('optional') or r.get('name') in include]
 port_step = config.get('port_step', int(os.environ.get('PORT_STEP_HINT', '10')))
 slot = int(os.environ['SLOT'])
 

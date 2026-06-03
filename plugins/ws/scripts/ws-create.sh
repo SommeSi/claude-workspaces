@@ -46,6 +46,11 @@ PROJECT_ROOT="${6:-}"
 SPEC="${7:-none}"
 GOAL="${8:-}"
 
+# Optional repos (\"optional\": true in config) are skipped unless their name is
+# listed (comma-separated) in WS_INCLUDE. Export it so every child script
+# (worktree-create, generate-files, registry build) sees the same opt-in set.
+export WS_INCLUDE="${WS_INCLUDE:-}"
+
 [ -z "$WS_PATH" ] && usage
 [ -z "$SLOT" ] && usage
 [ -z "$BRANCH" ] && usage
@@ -228,8 +233,13 @@ repos_json = os.environ.get('REPOS_JSON', '')
 if repos_json:
     repos = json.loads(repos_json)
 else:
+    # Record only the repos that were actually created — optional repos are
+    # skipped unless opted in via WS_INCLUDE (mirrors ws-worktree-create.sh).
+    include = set(n.strip() for n in os.environ.get('WS_INCLUDE', '').split(',') if n.strip())
     repos = []
     for r in cfg.get('repos', []):
+        if r.get('optional') and r['name'] not in include:
+            continue
         port = r.get('port_base', 3000) + int(slot) * port_step
         repos.append({
             "name": r['name'],

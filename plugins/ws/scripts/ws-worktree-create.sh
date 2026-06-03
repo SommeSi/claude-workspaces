@@ -39,8 +39,12 @@ LOCAL_CONFIG="$PROJECT_ROOT/.claude-workspaces.local.json"
 
 mkdir -p "$WS_PATH"
 
-# Read repos (merge local overrides)
-REPOS_JSON=$(python3 -c "
+# Read repos (merge local overrides).
+# Optional repos (\"optional\": true in config) are skipped by default and only
+# created when their name appears in the WS_INCLUDE env var (comma-separated).
+# This is THE decision point for which worktree dirs get created — everything
+# downstream (generate-files docs, registry, db-isolate) keys off this set.
+REPOS_JSON=$(WS_INCLUDE="${WS_INCLUDE:-}" python3 -c "
 import json, os, sys
 cfg = json.load(open('$CONFIG'))
 repos = {r['name']: dict(r) for r in cfg.get('repos', [])}
@@ -53,7 +57,9 @@ if os.path.isfile(lf):
                 repos[name].update(overrides)
     except Exception:
         pass
-print(json.dumps(list(repos.values())))
+include = set(n.strip() for n in os.environ.get('WS_INCLUDE', '').split(',') if n.strip())
+active = [r for r in repos.values() if not r.get('optional') or r.get('name') in include]
+print(json.dumps(active))
 ")
 t "config parsed"
 

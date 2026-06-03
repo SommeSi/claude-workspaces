@@ -58,6 +58,16 @@ Compute:
 - `workspace_path` = `<workspaces_root>/<slug>`
 - ports from `repos_with_ports`
 
+### Optional repos (opt-in)
+
+Some repos in `repos_with_ports` may have `"optional": true`. These are **skipped by default** — most workspaces don't need them, and skipping a repo avoids an extra worktree + base-branch pull.
+
+Include an optional repo **only when the user's message explicitly asks for it** (e.g. "with webhook", "avec le webhook", "+ webhook"). Build:
+
+- `WS_INCLUDE` = comma-separated names of the optional repos to include (empty string if none).
+
+Non-optional repos are always created.
+
 ---
 
 ## Step 3 — Recap and confirm
@@ -84,6 +94,12 @@ Ready to create workspace:
 Confirm? [Y/n]
 ```
 
+**List only the repos that will be created** (non-optional repos + any in `WS_INCLUDE`). If there are optional repos you are NOT including, add a one-line hint so the user knows they exist, e.g.:
+
+```
+  (webhook is optional and skipped — say "with webhook" to include it)
+```
+
 Wait for the user's response. Accept: `y`, `yes`, `o`, `oui`, or empty. **Anything else cancels.**
 
 ---
@@ -93,9 +109,12 @@ Wait for the user's response. Accept: `y`, `yes`, `o`, `oui`, or empty. **Anythi
 Run the orchestrator. It chains **worktree creation → file generation → DB isolation → post_create hook → registry update → terminal color** in one bash process.
 
 ```bash
+WS_INCLUDE="<comma-separated optional repos, or empty>" \
 /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-create.sh" \
   "<workspace_path>" "<slot>" "<branch>" "<color>" "<emoji>" "<git_root>" "<spec>" "<goal>"
 ```
+
+`WS_INCLUDE` opts optional repos in (see Step 2). Omit it or pass `""` to create only the default (non-optional) repos.
 
 What it does internally:
 - **worktree-create**: parallel `git worktree add` per repo + base-branch pull
