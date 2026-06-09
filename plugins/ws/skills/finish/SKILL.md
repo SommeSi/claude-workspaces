@@ -6,319 +6,75 @@ allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
 
 **Respond in the user's language.**
 
-You are finalizing and removing a workspace. Follow the steps below **in order**. Never skip ahead. Never batch multiple questions in a single message.
+You are finalizing and removing a workspace. The scripts do all the work; you only relay the recap and collect **one** confirmation. Do not run extra git/registry commands by hand — the preflight already did the thinking.
 
 ---
 
-## Step 1 — Detect current workspace
+## Step 1 — Preflight (ONE call, read-only)
 
-Read the registry:
+Run the preflight. It detects the workspace from the current directory, runs every safety check across all repos (filtered uncommitted files + merge-state vs the branch's real base), and prints a ready-to-show recap plus a machine block.
 
 ```bash
-cat ~/.claude-workspaces/registry.json 2>/dev/null || echo '{"workspaces":{},"next_slot":1}'
+"${CLAUDE_PLUGIN_ROOT}/scripts/ws-finish-preflight.sh"
 ```
 
-Match `pwd` against the `workspace_path` of each registry entry (check if `pwd` starts with or equals the workspace path).
+Parse the output:
 
-- If a match is found: proceed with that workspace.
-- If no match: show the list of existing workspaces and ask the user which one to finish.
-- If the registry is empty or has no workspaces: inform the user there are no workspaces to finish, and stop.
+- Everything **before** `===WS-FINISH-MACHINE===` is the human recap → show it to the user as-is (you may translate it).
+- Everything **after** is `key=value` data for Step 3: `WS_SLOT`, `WS_PATH`, `WS_SLUG`, `WS_MODE`, `WS_PROJECT_ROOT`, `WS_CONFIG`, `WS_PORTS`, `OVERALL`.
+
+Handle the edge cases:
+
+- `OVERALL=none` **and** the output says "No workspace matches" → show the listed workspaces and ask which one to finish, then re-run the preflight with that path as the argument: `ws-finish-preflight.sh <workspace_path>`.
+- `OVERALL=none` **and** the output says "no registry" → tell the user there are no workspaces to finish, and stop.
 
 ---
 
-## Step 2 — Safety checks (delegated to scripts, parallel across repos)
+## Step 2 — The single validation
 
-For each repo, run these two commands in parallel:
+Show the recap, then ask **exactly one** question:
 
-```bash
-git -C <repo_path> status --short
-git -C <repo_path> branch --show-current
-```
+> Proceed? [y/N]
 
-For worktree-mode repos, also run the merge-safety script — it handles fetch, GitHub PR lookup, base auto-detection, and patch-equivalent (squash/rebase) detection:
+- Default is **NO**. Proceed only on an explicit `y` / `yes` / `oui`.
+- The recap already lists every warning (uncommitted, unmerged) inline — do **not** split them into separate prompts. One recap, one question.
+- If `OVERALL=warn`, the recap shows the work that will be lost; the same single `y/N` covers it.
 
-```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/ws-check-merged.sh" <repo_path> <branch>
-```
-
-The script prints `key=value` lines (`STATUS`, `REASON`, `METHOD`, `BASE`, `COMMITS_AHEAD`, `UNMERGED_COMMITS`) and exits with:
-- `0` → branch merged or no commits ahead → **safe**
-- `1` → unmerged commits exist → **block, ask for confirmation**
-- `2` → unknown (offline, no base ref, …) → **warn, ask for confirmation**
-
-For worktree mode, also note whether the branch is on the remote (informational only):
-
-```bash
-git -C <repo_path> ls-remote --heads origin <branch> | wc -l
-```
-
-### Check 1 — Uncommitted files
-
-Take the output of `git status --short` and **filter out** these well-known transient files that are always present in worktrees and whose loss is expected (do not show them, do not prompt for them):
-
-- `.env.local`
-- `.env.local.*` (e.g. `.env.local.bak`)
-- `.vscode/` (any path under it)
-- `.idea/` (any path under it)
-- `.DS_Store`
-
-Only the **remaining** entries (modifications to tracked files, or other untracked files) count as "uncommitted files".
-
-- If the filtered list is empty → **no prompt**, continue silently.
-- Otherwise, show the user only the filtered list and require explicit confirmation:
-
-  > ⚠️ You have uncommitted files in `<repo_name>`: `<filtered list>`. These will be LOST. Continue? [y/N]
-
-  Default is **NO**. Only proceed if the user explicitly answers `y` or `yes`.
-
-### Check 2 — Unmerged branch (worktree mode only)
-
-Parse the output of `ws-check-merged.sh`:
-
-- If `STATUS=safe` → **no prompt**, the branch is merged (PR merged on GitHub, or patch-equivalent on base — handles squash/rebase). Continue silently.
-- If `STATUS=unmerged` → show the commits and require explicit confirmation:
-
-  > ⚠️ Branch `<branch>` has N commit(s) not on `<base>` in `<repo_name>`:
-  > `<UNMERGED_COMMITS list>`
-  > This branch is **NOT merged**. Deleting it means losing this work.
-  > Tip: consider creating a PR first (`gh pr create`).
-  >
-  > Are you absolutely sure you want to delete unmerged work? Type "delete unmerged" to confirm.
-
-  Default is **NO**. Only proceed if the user explicitly types `delete unmerged`.
-
-- If `STATUS=unknown` → fall back to a soft warning:
-
-  > ⚠️ Could not verify merge state for `<branch>` in `<repo_name>` (`<REASON>`). Continue anyway? [y/N]
-
-  Default is **NO**.
-
-### Check 3 — Branch not on remote (worktree mode only, informational)
-
-If `git ls-remote --heads origin <branch>` returns `0`, note:
-
-> ℹ️ Branch `<branch>` has not been pushed to remote.
-
-This check is **informational only** — it does not block the cleanup.
+Anything other than yes → tell the user the workspace was **not** removed, and stop.
 
 ---
 
-## Step 3 — Capture lessons learned (MANDATORY)
+## Step 3 — Execute (ONE call) + silent memory
 
-Before any cleanup, do two things:
+On `yes`, run the orchestrated teardown. It kills the ports, runs the `pre_destroy` hook, drops the isolated `_w<slot>` DBs, removes the worktrees, deletes the directory (preserved in attached mode), frees the slot, resets the terminal, and closes the workspace window:
 
-### 3a — Claude's own learnings
+```bash
+CONFIG="<WS_CONFIG>" PROJECT_ROOT="<WS_PROJECT_ROOT>" \
+  /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-destroy.sh" "<WS_PATH>" "<WS_SLOT>"
+```
 
-Review the entire conversation history and identify things **you** learned that are worth remembering for future sessions. Look for:
+(If `WS_CONFIG` is empty, omit the `CONFIG=` part — the script will locate it.)
 
-- **feedback**: corrections the user made to your approach, preferences expressed, things that worked well
-- **project**: architectural decisions, constraints, deadlines, stakeholder context
-- **reference**: external tools, dashboards, docs, APIs discovered during the session
-- **user**: new info about the user's role, expertise, or preferences
-
-Present your findings as a numbered list:
-
-> Here's what I picked up during this session:
-> 1. [feedback] ...
-> 2. [project] ...
-> 3. [reference] ...
->
-> Want me to save any of these? (all / pick numbers / none)
-
-Wait for the user's answer. Save the selected items.
-
-### 3b — User's own learnings
-
-Then ask:
-
-> And you — did you learn anything **surprising or non-obvious** that should be remembered for future sessions?
->
-> Examples: tricky API behavior, undocumented convention, pattern that worked well, important decision.
->
-> Answer freely, or say "no" to skip.
-
-Wait for the user's answer.
-
-### Saving memories
-
-For each item to save (from 3a or 3b):
-
-1. Determine the appropriate memory type: `feedback`, `project`, `reference`, or `user`.
-2. Draft a memory file with proper frontmatter:
-   ```markdown
-   ---
-   name: <short-identifier>
-   description: <one-line summary>
-   type: <feedback|project|reference|user>
-   ---
-   <content>
-   ```
-3. Show the draft to the user and ask for confirmation before saving.
-4. Save to the Claude memory directory (same location as `MEMORY.md`).
-5. Update `MEMORY.md` to add an entry in the index.
+**Then, silently** (no prompt, non-blocking): if anything genuinely worth remembering came up this session — a correction the user made, a non-obvious project constraint, a useful external resource — save it to the Claude memory directory (one file per fact with proper frontmatter) and add a one-line entry to `MEMORY.md`. Skip anything derivable from code or git history. Never interrupt the flow to ask about this.
 
 ---
 
-## Step 4 — Final confirmation with full recap
+## Step 4 — Summary
 
-Show a complete summary of what will be destroyed:
-
-```
-Cleanup recap for workspace w<slot> (<slug>):
-  Mode     : <worktree|sandbox>
-  Branch   : <branch or N/A>
-  Path     : <workspace_path>
-  Repos    : <repo_name> (port <port>), ...
-
-Actions:
-  1. Kill processes on ports <port_list>
-  2. Execute hooks (pre_destroy, db_destroy) if defined
-  3. git worktree remove for each repo (worktree mode)
-  4. Remove directory <workspace_path>
-  5. Free slot <slot> in registry
-
-⚠️ This is **irreversible**. Proceed? [y/N]
-```
-
-Default is **NO**. Only proceed if the user explicitly answers `y` or `yes`. Anything else cancels — inform the user that the workspace was NOT removed.
-
----
-
-## Step 5 — Execute cleanup
-
-**CRITICAL: run `cd $HOME` first if the current directory is inside the workspace.**
-
-```bash
-# Check if inside workspace before proceeding
-[[ "$PWD" == <workspace_path>* ]] && cd $HOME
-```
-
-Execute each sub-step in order. If a step fails, log a warning and **continue** — do not abort the entire cleanup.
-
-### 5a — Kill processes on ports
-
-For each port in the workspace:
-
-```bash
-pids=$(lsof -ti :<port> 2>/dev/null || true)
-if [ -n "$pids" ]; then
-  echo "$pids" | xargs kill -TERM 2>/dev/null || true
-  sleep 2
-  pids=$(lsof -ti :<port> 2>/dev/null || true)
-  [ -n "$pids" ] && echo "$pids" | xargs kill -KILL 2>/dev/null || true
-fi
-```
-
-Log: `✓ Killed process on port <port>` or `- Nothing on port <port>`.
-
-### 5b — Execute pre_destroy hook
-
-If a `pre_destroy` hook is defined in `.claude-workspaces.json`, run it with variable substitution (`$SLOT`, `$BRANCH`, `$SLUG`, `$WORKSPACE_PATH` with `~` expanded to `$HOME`):
-
-```bash
-eval "<pre_destroy_command_with_substitutions>"
-```
-
-### 5c — Orchestrated destroy (1 script call)
-
-Run `ws-destroy.sh` — it handles **everything** in parallel across repos: drop isolated `_w<slot>` DBs via `dropdb` (no Rails/bundler dependency), `git worktree remove --force` per repo, delete the workspace directory, and atomic registry update:
-
-```bash
-CONFIG="<config_path>" PROJECT_ROOT="<git_root>" \
-  /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-destroy.sh" "<workspace_path>" "<slot>"
-```
-
-The script:
-- Reads DB URLs from each repo's `.env.local` / `.env`, filters to `_w<slot>` suffix (**refuse of drop any non-isolated DB**)
-- Runs `dropdb --if-exists` per DB, parallel across repos
-- `git worktree remove --force` per repo, parallel
-- `rm -rf <workspace_path>`
-- Atomic registry update (tempfile + rename)
-
-If a `db_destroy` hook is defined in the project config, it takes priority over `dropdb` (future enhancement — currently `dropdb` is always used).
-
-Partial failures don't abort: each DB / worktree removal is best-effort with a warning. Continue to 5d.
-
-### 5d — Reset terminal
-
-Reset the terminal title and background color:
-
-```bash
-# Detect the parent terminal device (Claude Code captures stdout)
-TTY_DEV="/dev/$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ')"
-
-# Reset background, tab name, and window title
-printf '\033]11;\007' > "$TTY_DEV" 2>/dev/null
-printf '\033]1;\007' > "$TTY_DEV" 2>/dev/null
-printf '\033]0;\007' > "$TTY_DEV" 2>/dev/null
-```
-
-### 5e — Close workspace window
-
-Close the WezTerm window associated with this workspace. Find it by matching the workspace path in the pane list:
-
-```bash
-WEZTERM_CLI="/Applications/WezTerm.app/Contents/MacOS/wezterm"
-if [ -x "$WEZTERM_CLI" ]; then
-  # Find all panes whose cwd starts with the workspace path
-  $WEZTERM_CLI cli list --format json | python3 -c "
-import json, sys
-panes = json.load(sys.stdin)
-ws_path = '<workspace_path>'
-window_ids = set()
-for p in panes:
-    cwd = p.get('cwd', '')
-    if cwd.startswith(ws_path):
-        window_ids.add(p['window_id'])
-for wid in window_ids:
-    print(wid)
-" | while read wid; do
-    # Kill all panes in that window
-    $WEZTERM_CLI cli list --format json | python3 -c "
-import json, sys
-panes = json.load(sys.stdin)
-for p in panes:
-    if str(p['window_id']) == '$wid':
-        print(p['pane_id'])
-" | while read pid; do
-      $WEZTERM_CLI cli kill-pane --pane-id "$pid" 2>/dev/null || true
-    done
-  done
-fi
-```
-
-If WezTerm is not installed, skip this step silently.
-
-After closing the window, exit the current Claude Code session:
-
-```bash
-exit
-```
-
----
-
-## Step 6 — Summary
-
-Show a concise success message, then exit:
+If the window wasn't closed (attached mode, or WezTerm absent), print a concise success line:
 
 ```
 ✅ Workspace w<slot> (<slug>) removed. Slot freed.
-<if memory saved> 💾 Memory "<name>" saved.
-
-Closing session...
 ```
+
+In worktree/sandbox mode the workspace window closes itself, so a summary may not be seen — that's expected.
 
 ---
 
 ## Rules
 
-- **Never delete without explicit confirmation.** Default answer is always NO.
-- **Uncommitted work = double confirmation.** Show the files, require explicit `y`/`yes`.
-- **Unmerged branch = explicit acknowledgment.** Show the commits, require explicit `y`/`yes`.
-- **Always ask about lessons learned** before starting cleanup. This step is mandatory.
-- **cd out before deleting** the workspace directory. Never delete the directory you're currently in.
-- **Partial failure = log and continue.** Do not abort the entire cleanup if one step fails.
-- **Never save to memory** things that are derivable from code or easily looked up.
-- **One question at a time.** Never batch multiple questions in a single message.
-- **Always read the registry before writing.** Never overwrite without reading first.
-- **Expand `~` to `$HOME` in all paths** before running shell commands.
+- **One question, total.** Detect and check silently; the only user interaction is the single `y/N` validation.
+- **Never delete without that explicit yes.** Default is always NO.
+- **Trust the scripts.** Don't re-run git status / merge checks / registry reads yourself — the preflight already did them and the destroy script is idempotent and best-effort (partial failures log and continue).
+- **Attached mode never deletes the directory.** The main checkout is preserved; only the slot is freed.
+- **Memory is silent and optional** — save in the background, never as a step that blocks the teardown.

@@ -66,6 +66,56 @@ else
   REPOS_JSON='[]'
 fi
 
+# ----------- READ workspace meta from registry (ports, branch, slug) -----------
+WS_META=$(SLOT="$SLOT" REG="$REG" python3 <<'PYEOF'
+import json, os
+try:
+    reg = json.load(open(os.environ['REG']))
+except Exception:
+    reg = {}
+w = reg.get('workspaces', {}).get(os.environ['SLOT'], {})
+print('PORTS=' + ','.join(str(r.get('port')) for r in w.get('repos', []) if r.get('port')))
+print('BRANCH=' + (w.get('branch') or ''))
+print('SLUG=' + (w.get('slug') or ''))
+PYEOF
+)
+WS_PORTS=$(echo "$WS_META" | sed -n 's/^PORTS=//p')
+WS_BRANCH=$(echo "$WS_META" | sed -n 's/^BRANCH=//p')
+WS_SLUG=$(echo "$WS_META" | sed -n 's/^SLUG=//p')
+
+# ----------- KILL processes on workspace ports -----------
+if [ -n "$WS_PORTS" ]; then
+  echo "→ Killing processes on ports: $WS_PORTS"
+  IFS=',' read -ra _PORTS <<< "$WS_PORTS" || true
+  for PORT in "${_PORTS[@]}"; do
+    [ -z "$PORT" ] && continue
+    PIDS=$(lsof -ti ":$PORT" 2>/dev/null || true)
+    if [ -n "$PIDS" ]; then
+      echo "$PIDS" | xargs kill -TERM 2>/dev/null || true
+      sleep 1
+      PIDS=$(lsof -ti ":$PORT" 2>/dev/null || true)
+      [ -n "$PIDS" ] && echo "$PIDS" | xargs kill -KILL 2>/dev/null || true
+      echo "  ✓ port $PORT cleared"
+    else
+      echo "  ↷ port $PORT: nothing running"
+    fi
+  done
+fi
+
+# ----------- pre_destroy hook (best-effort, never aborts) -----------
+if [ -n "$CONFIG" ]; then
+  PRE_DESTROY=$(CONFIG="$CONFIG" python3 -c "import json,os;print((json.load(open(os.environ['CONFIG'])).get('hooks',{}) or {}).get('pre_destroy','') or '')" 2>/dev/null || true)
+  if [ -n "$PRE_DESTROY" ]; then
+    echo "→ Running pre_destroy hook"
+    CMD=${PRE_DESTROY//\$SLOT/$SLOT}
+    CMD=${CMD//\$BRANCH/$WS_BRANCH}
+    CMD=${CMD//\$SLUG/$WS_SLUG}
+    CMD=${CMD//\$WORKSPACE_PATH/$WS_PATH}
+    CMD=${CMD//\~/$HOME}
+    ( eval "$CMD" ) || echo "  ⚠ pre_destroy hook failed (continuing)"
+  fi
+fi
+
 # ----------- DB DROP (parallel across repos) -----------
 echo "→ Dropping isolated DBs (_w$SLOT)"
 
@@ -183,6 +233,11 @@ remove_worktree() {
       echo "  ↷ $NAME: no worktree dir"
       exit 0
     fi
+    # Safety: never touch a repo that IS the main checkout (attached mode).
+    if [ -n "$PROJECT_ROOT" ] && { [ "$WT_PATH" = "$PROJECT_ROOT" ] || [ "$WT_PATH" = "$WS_PATH" -a "$WS_PATH" = "$PROJECT_ROOT" ]; }; then
+      echo "  ↷ $NAME: attached main checkout — preserved"
+      exit 0
+    fi
     # Resolve origin repo (where the worktree was created FROM)
     local ORIGIN_ABS=""
     if [ -n "$PROJECT_ROOT" ]; then
@@ -228,7 +283,9 @@ for pid in "${PIDS[@]}"; do wait "$pid" || true; done
 for log in "${LOGS[@]}"; do [ -f "$log" ] && cat "$log"; done
 
 # ----------- REMOVE WORKSPACE DIR -----------
-if [ -d "$WS_PATH" ]; then
+if [ -n "$PROJECT_ROOT" ] && [ "$WS_PATH" = "$PROJECT_ROOT" ]; then
+  echo "  ↷ attached workspace — directory preserved ($WS_PATH)"
+elif [ -d "$WS_PATH" ]; then
   rm -rf "$WS_PATH"
   echo "  ✓ removed $WS_PATH"
 fi
@@ -266,4 +323,39 @@ else:
 PYEOF
 fi
 
+# ----------- RESET terminal title + background -----------
+TTY_DEV="/dev/$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d ' ')"
+if [ -e "$TTY_DEV" ]; then
+  printf '\033]11;\007' > "$TTY_DEV" 2>/dev/null || true
+  printf '\033]1;\007'  > "$TTY_DEV" 2>/dev/null || true
+  printf '\033]0;\007'  > "$TTY_DEV" 2>/dev/null || true
+fi
+
 echo "✓ Workspace w$SLOT destroyed"
+
+# ----------- CLOSE the WezTerm window for this workspace (last; skip attached) -----------
+if ! { [ -n "$PROJECT_ROOT" ] && [ "$WS_PATH" = "$PROJECT_ROOT" ]; }; then
+  WEZTERM_CLI="/Applications/WezTerm.app/Contents/MacOS/wezterm"
+  if [ -x "$WEZTERM_CLI" ]; then
+    "$WEZTERM_CLI" cli list --format json 2>/dev/null | WS_PATH="$WS_PATH" python3 -c '
+import json, os, sys
+ws = os.environ["WS_PATH"]
+def cpath(c):
+    c = c or ""
+    if "://" in c:
+        c = c.split("://", 1)[1]
+        c = c[c.find("/"):] if "/" in c else c
+    return c
+try:
+    panes = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+wins = {p["window_id"] for p in panes if cpath(p.get("cwd","")).startswith(ws)}
+for p in panes:
+    if p.get("window_id") in wins:
+        print(p["pane_id"])
+' 2>/dev/null | while read -r pid; do
+      [ -n "$pid" ] && "$WEZTERM_CLI" cli kill-pane --pane-id "$pid" 2>/dev/null || true
+    done || true
+  fi
+fi
