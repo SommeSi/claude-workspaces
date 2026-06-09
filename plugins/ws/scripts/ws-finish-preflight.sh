@@ -95,7 +95,9 @@ for d in (project_root, ws_path):
         config_path = os.path.join(d, ".claude-workspaces.json")
         break
 
-# --- Per-repo safety checks ---------------------------------------------
+# --- Per-repo safety checks (parallel — the merge check does a git fetch) -
+import concurrent.futures
+
 warnings = []        # human lines
 overall = "safe"
 ports = []
@@ -107,17 +109,19 @@ checked = 0          # repos we could actually inspect
 missing_repos = []   # repos whose dir is gone
 
 for r in repos:
+    if r.get("port"):
+        ports.append(str(r["port"]))
+
+
+def check_repo(r):
+    """Run a repo's safety checks. Returns (name, missing, warn, lines)."""
     name = r.get("name", "?")
     path = r.get("path", "")
-    port = r.get("port")
-    if port:
-        ports.append(str(port))
-    if not will_delete:
-        continue
     if not path or not os.path.isdir(path):
-        missing_repos.append(name)
-        continue
-    checked += 1
+        return (name, True, False, [])
+
+    warn = False
+    lines = []
 
     # 1. Uncommitted (filtered)
     # NB: do NOT strip — porcelain v1 has 2 status cols + a space, so the path
@@ -134,13 +138,12 @@ for r in repos:
         if f and not is_noise(f):
             dirty.append(line.rstrip())
     if dirty:
-        overall = "warn"
-        warnings.append(
-            f"  ⚠ {name}: {len(dirty)} uncommitted change(s) will be LOST:")
+        warn = True
+        lines.append(f"  ⚠ {name}: {len(dirty)} uncommitted change(s) will be LOST:")
         for d in dirty[:12]:
-            warnings.append(f"        {d}")
+            lines.append(f"        {d}")
         if len(dirty) > 12:
-            warnings.append(f"        … +{len(dirty) - 12} more")
+            lines.append(f"        … +{len(dirty) - 12} more")
 
     # 2. Unmerged branch (worktree mode only)
     if mode == "worktree":
@@ -157,20 +160,36 @@ for r in repos:
                     info[k] = v
             st = info.get("STATUS", "unknown")
             if st == "unmerged":
-                overall = "warn"
-                warnings.append(
+                warn = True
+                lines.append(
                     f"  ⚠ {name}: branch '{branch}' NOT merged into "
                     f"{info.get('BASE','base')} "
                     f"({info.get('COMMITS_AHEAD','?')} commit(s) ahead):")
                 for c in (info.get("UNMERGED_COMMITS", "") or "").split(";"):
                     if c.strip():
-                        warnings.append(f"        {c.strip()}")
+                        lines.append(f"        {c.strip()}")
             elif st == "unknown":
-                overall = "warn"
-                warnings.append(
+                warn = True
+                lines.append(
                     f"  ⚠ {name}: could not verify merge state "
                     f"({info.get('REASON','?')})")
             # st == safe → silent, nothing to warn about
+
+    return (name, False, warn, lines)
+
+
+if will_delete and repos:
+    # Fan out: the merge check fetches per repo, so run repos concurrently.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(repos))) as ex:
+        results = list(ex.map(check_repo, repos))   # preserves repo order
+    for name, missing, warn, lines in results:
+        if missing:
+            missing_repos.append(name)
+            continue
+        checked += 1
+        if warn:
+            overall = "warn"
+        warnings.extend(lines)
 
 # --- Build human recap --------------------------------------------------
 repo_lines = []
