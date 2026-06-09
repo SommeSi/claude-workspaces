@@ -36,7 +36,8 @@ NOISE = (
     re.compile(r'(^|/)\.vscode(/|$)'),
     re.compile(r'(^|/)\.idea(/|$)'),
     re.compile(r'(^|/)\.DS_Store$'),
-    re.compile(r'(^|/)config/database\.yml$'),  # rewritten by ws-db-isolate every worktree
+    re.compile(r'(^|/)config/database\.yml$'),          # rewritten by ws-db-isolate every worktree
+    re.compile(r'(^|/)db/(cable|cache|queue)_schema\.rb$'),  # Solid adapter schema dumps, regenerated per worktree
 )
 
 def is_noise(path):
