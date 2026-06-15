@@ -12,43 +12,43 @@ color by hand — always resolve it through the single source of truth:
 
 ## How it works
 
-**Design: dark jewel tones — rich but lightness-capped.** Backgrounds are
-painted full-screen on the terminal (OSC 11) and the VS Code titleBar/statusBar,
-both rendering **white text** on top. Eye strain comes from **lightness**, not
-saturation — so colors are kept dark (relative luminance ≤ ~0.047, white-text
-contrast ≥ 10:1) while staying saturated enough to tell apart (deep wine, navy,
-forest, plum). Placed by farthest-point sampling in CIELAB: **min 16.6 ΔE
-between any two** colors.
+**Design: comfort first for a full-screen fill.** Backgrounds are painted
+full-screen on the terminal (OSC 11) and the VS Code titleBar/statusBar, both
+rendering **white text** on top. A saturated color is fatiguing across a whole
+screen *even when it's dark* — so the register is BOTH dark AND muted (relative
+luminance ≤ 0.030, low chroma; every color is calmer than the wine that got
+rejected). Placed by farthest-point sampling in CIELAB within that comfortable
+band → **min ~10 ΔE** between any two, which reads as "clearly different but
+calm".
 
-- Names/badges are **approximate** — dark warm tones read as wine/copper/gold
-  rather than bright red/orange/yellow, and Unicode only has ~9 colored circles,
-  so some badges repeat across families. The *colors* are all distinct.
-- "White" is a neutral light grey badged ⚪ (a literal white fill would hide the
-  text).
+- Names are **descriptive** (Olive/Steel/Plum…) because muted darks aren't
+  bright primaries. Badges are the nearest colored circle and may repeat across
+  families — the *colors* are what's distinct.
+- "White" is a neutral grey badged ⚪ (a literal white fill would hide the text).
 - **Slots 17+** generate a distinct hue per slot via golden-angle rotation
-  (`hue = (slot-1) × 137.508° mod 360`), kept dark & saturated (`HLS L=0.14,
-  S=0.85`) — effectively infinite, badge = nearest colored circle.
+  (`hue = (slot-1) × 137.508° mod 360`), kept dark & muted (`HLS L=0.13,
+  S=0.30`) — effectively infinite, badge = nearest colored circle.
 
 ## Curated table (slots 1–16)
 
-| Slot | Emoji | Hex       | Name    |
-|------|-------|-----------|---------|
-| 1    | 🔴    | `#360216` | Red     |
-| 2    | 🩷    | `#6d182f` | Crimson |
-| 3    | 🟤    | `#520e00` | Rust    |
-| 4    | 🟠    | `#3c2115` | Copper  |
-| 5    | 🟡    | `#4a3601` | Gold    |
-| 6    | 🟩    | `#1c2200` | Lime    |
-| 7    | 🟢    | `#174004` | Green   |
-| 8    | 💚    | `#004332` | Teal    |
-| 9    | 🔵    | `#003f59` | Blue    |
-| 10   | 🩵    | `#003e74` | Azure   |
-| 11   | 🟦    | `#151337` | Indigo  |
-| 12   | 🟣    | `#402e69` | Violet  |
-| 13   | 🟪    | `#4d1349` | Magenta |
-| 14   | 💜    | `#502e45` | Plum    |
-| 15   | ⚪    | `#3a3b3e` | White   |
-| 16   | ⚫    | `#17181c` | Slate   |
+| Slot | Emoji | Hex       | Name   |
+|------|-------|-----------|--------|
+| 1    | 🔴    | `#3f282c` | Maroon |
+| 2    | 🟤    | `#3a1b15` | Rust   |
+| 3    | 🟡    | `#382c21` | Olive  |
+| 4    | 🟠    | `#2c1a00` | Khaki  |
+| 5    | 🟡    | `#262507` | Gold   |
+| 6    | 🟢    | `#20331c` | Forest |
+| 7    | 🟢    | `#162014` | Pine   |
+| 8    | 💚    | `#002c22` | Spruce |
+| 9    | 🩵    | `#072122` | Teal   |
+| 10   | 🔵    | `#00343c` | Steel  |
+| 11   | 🟦    | `#062a41` | Iris   |
+| 12   | 🟣    | `#1e1a33` | Plum   |
+| 13   | 🟪    | `#312b3d` | Grape  |
+| 14   | 🩷    | `#391c2f` | Rose   |
+| 15   | ⚪    | `#303034` | White  |
+| 16   | ⚫    | `#191a1e` | Slate  |
 
 ## Terminal Coloring
 
