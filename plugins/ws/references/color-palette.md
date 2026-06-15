@@ -1,17 +1,48 @@
 # Color Palette
 
-8 colors, assigned by slot. Slots beyond 8 cycle: `index = ((slot - 1) % 8)`.
+Colors are assigned by slot and are **effectively infinite**. Never compute a
+color by hand — always resolve it through the single source of truth:
 
-| Index | Slot(s)      | Emoji | Hex       | Name   |
-|-------|--------------|-------|-----------|--------|
-| 0     | 1, 9, 17...  | 🟢    | `#1a3a2a` | Green  |
-| 1     | 2, 10, 18... | 🟠    | `#3a2a15` | Orange |
-| 2     | 3, 11, 19... | 🟣    | `#2a1a3a` | Purple |
-| 3     | 4, 12, 20... | 🔴    | `#3a1515` | Red    |
-| 4     | 5, 13, 21... | 🩵    | `#15353a` | Cyan   |
-| 5     | 6, 14, 22... | 🩷    | `#3a1a2e` | Pink   |
-| 6     | 7, 15, 23... | 🟡    | `#3a3415` | Yellow |
-| 7     | 8, 16, 24... | 🔵    | `#1a2835` | Blue   |
+```bash
+/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-palette.sh" <slot>
+# → COLOR=#1a3a2a
+#   EMOJI=🟢
+#   NAME=Green
+```
+
+## How it works
+
+- **Slots 1–16** use a curated palette (table below).
+- **Slots 17+** generate a distinct color procedurally: a golden-angle hue
+  rotation (`hue = (slot-1) × 137.508° mod 360`) rendered at a fixed dark tint
+  (`HSL(hue, 45%, 16%)`). Every slot gets a fresh hue, so colors never repeat
+  in practice. The badge becomes the nearest colored circle for that hue.
+
+**Why backgrounds stay dark:** the color is painted as the terminal background
+(OSC 11) and the VS Code titleBar/statusBar, both rendering **white text** on
+top. So every color is a *dark tint* — "White" is a neutral dark grey badged
+⚪, not a literal white fill (which would make the text invisible).
+
+## Curated table (slots 1–16)
+
+| Slot | Emoji | Hex       | Name    |
+|------|-------|-----------|---------|
+| 1    | 🟢    | `#1a3a2a` | Green   |
+| 2    | 🟠    | `#3a2a15` | Orange  |
+| 3    | 🟣    | `#2a1a3a` | Purple  |
+| 4    | 🔴    | `#3a1515` | Red     |
+| 5    | 🩵    | `#15353a` | Cyan    |
+| 6    | 🩷    | `#3a1a2e` | Pink    |
+| 7    | 🟡    | `#3a3415` | Yellow  |
+| 8    | 🔵    | `#1a2835` | Blue    |
+| 9    | ⚪    | `#2e2e2e` | White   |
+| 10   | 🟤    | `#3a2a1f` | Brown   |
+| 11   | 🟩    | `#2a3a15` | Lime    |
+| 12   | 🟦    | `#1a1f3a` | Indigo  |
+| 13   | 🟪    | `#341a3a` | Magenta |
+| 14   | 💚    | `#153a30` | Teal    |
+| 15   | 🧡    | `#3a2410` | Amber   |
+| 16   | ⚫    | `#20242a` | Slate   |
 
 ## Terminal Coloring
 

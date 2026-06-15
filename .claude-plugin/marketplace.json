@@ -9,7 +9,7 @@
     {
       "name": "workspace",
       "description": "Workspace manager with colored terminals, git worktrees, and per-workspace Claude context",
-      "version": "0.8.8",
+      "version": "0.8.9",
       "author": {
         "name": "sommesi"
       },

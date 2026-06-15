@@ -14,17 +14,14 @@
 
 set -euo pipefail
 
-COLORS='["#1a3a2a","#3a2a15","#2a1a3a","#3a1515","#15353a","#3a1a2e","#3a3415","#1a2835"]'
-EMOJIS='["🟢","🟠","🟣","🔴","🩵","🩷","🟡","🔵"]'
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${1:-}"
 
-python3 - "$PROJECT_ROOT" "$COLORS" "$EMOJIS" <<'PYEOF'
+python3 - "$PROJECT_ROOT" "$SCRIPT_DIR" <<'PYEOF'
 import json, os, subprocess, sys
 
 project_root = sys.argv[1]
-colors = json.loads(sys.argv[2])
-emojis = json.loads(sys.argv[3])
+script_dir = sys.argv[2]
 
 # --- Step 1: git root ---
 if not project_root:
@@ -75,9 +72,18 @@ slot = 1
 while slot in used:
     slot += 1
 
-idx = (slot - 1) % 8
-color = colors[idx]
-emoji = emojis[idx]
+# Resolve color/emoji from the shared palette (single source of truth).
+# Slots 1..16 are curated; 17+ are generated → effectively infinite.
+pal = subprocess.run(
+    [os.path.join(script_dir, 'ws-palette.sh'), str(slot)],
+    capture_output=True, text=True,
+)
+color, emoji = '', ''
+for line in pal.stdout.splitlines():
+    if line.startswith('COLOR='):
+        color = line[len('COLOR='):]
+    elif line.startswith('EMOJI='):
+        emoji = line[len('EMOJI='):]
 
 # Compute ports
 port_step = config.get('port_step', 10)

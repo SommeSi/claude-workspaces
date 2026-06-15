@@ -63,7 +63,13 @@ Scan keys `1, 2, 3, ...` in `workspaces` and return the first missing key. This 
 
 ### 3c — Derive color and emoji
 
-See `references/color-palette.md`. Compute: `index = (slot - 1) % 8`, then look up the corresponding hex color and emoji.
+Run the shared palette resolver — do **not** compute the color by hand (slots beyond 16 are generated, not table-lookups):
+
+```bash
+/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-palette.sh" <slot>
+```
+
+It prints `COLOR=`, `EMOJI=`, and `NAME=`. Use those values. See `references/color-palette.md` for how the palette is built.
 
 ### 3d — Detect branch (if git repo)
 
