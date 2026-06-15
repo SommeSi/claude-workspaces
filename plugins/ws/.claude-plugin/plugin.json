@@ -1,6 +1,6 @@
 {
   "name": "workspace",
-  "version": "0.8.9",
+  "version": "0.8.10",
   "description": "Workspace manager for Claude Code — isolated sessions with colored terminals, git worktrees, and per-workspace context",
   "author": {
     "name": "sommesi"

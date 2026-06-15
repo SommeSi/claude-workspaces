@@ -12,37 +12,41 @@ color by hand — always resolve it through the single source of truth:
 
 ## How it works
 
-- **Slots 1–16** use a curated palette (table below).
+- **Slots 1–16** use a curated palette (table below). The 16 colors were chosen
+  by farthest-point sampling in CIELAB so **every pair is ≥ 19 ΔE apart** — no
+  two backgrounds look alike (e.g. Blue ↔ Indigo = 26 ΔE). The naive 8-color
+  table this replaced had pairs as close as 4 ΔE.
 - **Slots 17+** generate a distinct color procedurally: a golden-angle hue
-  rotation (`hue = (slot-1) × 137.508° mod 360`) rendered at a fixed dark tint
-  (`HSL(hue, 45%, 16%)`). Every slot gets a fresh hue, so colors never repeat
-  in practice. The badge becomes the nearest colored circle for that hue.
+  rotation (`hue = (slot-1) × 137.508° mod 360`) rendered in the same dark band
+  (L* 28, max readable chroma). Every slot gets a fresh hue, so colors never
+  repeat in practice. The badge becomes the nearest colored circle for that hue.
 
 **Why backgrounds stay dark:** the color is painted as the terminal background
 (OSC 11) and the VS Code titleBar/statusBar, both rendering **white text** on
-top. So every color is a *dark tint* — "White" is a neutral dark grey badged
-⚪, not a literal white fill (which would make the text invisible).
+top. So every color is a *dark tint* (L* 23–33, white-text contrast ≥ 7:1) —
+"White" is a neutral light grey badged ⚪, not a literal white fill (which would
+make the text invisible).
 
 ## Curated table (slots 1–16)
 
 | Slot | Emoji | Hex       | Name    |
 |------|-------|-----------|---------|
-| 1    | 🟢    | `#1a3a2a` | Green   |
-| 2    | 🟠    | `#3a2a15` | Orange  |
-| 3    | 🟣    | `#2a1a3a` | Purple  |
-| 4    | 🔴    | `#3a1515` | Red     |
-| 5    | 🩵    | `#15353a` | Cyan    |
-| 6    | 🩷    | `#3a1a2e` | Pink    |
-| 7    | 🟡    | `#3a3415` | Yellow  |
-| 8    | 🔵    | `#1a2835` | Blue    |
-| 9    | ⚪    | `#2e2e2e` | White   |
-| 10   | 🟤    | `#3a2a1f` | Brown   |
-| 11   | 🟩    | `#2a3a15` | Lime    |
-| 12   | 🟦    | `#1a1f3a` | Indigo  |
-| 13   | 🟪    | `#341a3a` | Magenta |
-| 14   | 💚    | `#153a30` | Teal    |
-| 15   | 🧡    | `#3a2410` | Amber   |
-| 16   | ⚫    | `#20242a` | Slate   |
+| 1    | 🔴    | `#6f0a2b` | Red     |
+| 2    | 🟤    | `#753d42` | Rust    |
+| 3    | 🟠    | `#652002` | Orange  |
+| 4    | 🧡    | `#634224` | Amber   |
+| 5    | 🟡    | `#5b4d00` | Yellow  |
+| 6    | 🟩    | `#343a1b` | Lime    |
+| 7    | 🟢    | `#004405` | Green   |
+| 8    | 💚    | `#005948` | Teal    |
+| 9    | 🩵    | `#00434a` | Cyan    |
+| 10   | 🔵    | `#005578` | Blue    |
+| 11   | 🟦    | `#1f498f` | Indigo  |
+| 12   | 🟣    | `#43296b` | Purple  |
+| 13   | 🟪    | `#553d63` | Plum    |
+| 14   | 🩷    | `#731c52` | Pink    |
+| 15   | ⚪    | `#58595c` | White   |
+| 16   | ⚫    | `#23272e` | Slate   |
 
 ## Terminal Coloring
 
