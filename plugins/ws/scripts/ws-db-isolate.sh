@@ -6,6 +6,10 @@
 #   1. Parse the original database name(s)
 #   2. Rewrite .env.local so DATABASE_URL (+ cache/queue/cable variants) point to
 #      <original>_w<slot>
+#   2b. Mirror each *_URL into a *_NAME var so an env-driven config/database.yml
+#       (database: <%= ENV.fetch("DATABASE_CACHE_NAME", ...) %>) isolates the
+#       secondary dev DBs without editing the tracked file. Repos still hard-coding
+#       names fall back to the legacy database.yml rewrite.
 #   3. If a db_create hook is defined in .claude-workspaces.json, run it
 #      Otherwise, for Rails, run `bin/rails db:create && bin/rails db:schema:load`
 #
@@ -227,6 +231,60 @@ def read_db_urls(env_file: str):
     return result
 
 
+def db_name_from_url(url: str) -> str:
+    """The bare DB name from a connection URL path ('' if none)."""
+    try:
+        return (urlparse(url).path or '').lstrip('/')
+    except Exception:
+        return ''
+
+
+def upsert_env_keys(env_file: str, kv: dict) -> None:
+    """Set each KEY=value in env_file, replacing an existing KEY line in place
+    and appending the rest. Creates the file if missing."""
+    lines = []
+    if os.path.isfile(env_file):
+        with open(env_file) as f:
+            lines = f.read().split('\n')
+    remaining = dict(kv)
+    out = []
+    for line in lines:
+        m = re.match(r'^([A-Z_][A-Z0-9_]*)=', line)
+        if m and m.group(1) in remaining:
+            key = m.group(1)
+            out.append(f'{key}={remaining.pop(key)}')
+        else:
+            out.append(line)
+    while out and out[-1] == '':
+        out.pop()
+    for key, val in remaining.items():
+        out.append(f'{key}={val}')
+    with open(env_file, 'w') as f:
+        f.write('\n'.join(out) + '\n')
+
+
+def write_db_name_envs(env_file: str, slot: int) -> list:
+    """Mirror every local DB <X>_URL into an <X>_NAME var (DATABASE_URL ->
+    DATABASE_NAME, DATABASE_CACHE_URL -> DATABASE_CACHE_NAME, ...), valued with
+    the already-isolated DB name parsed from that URL.
+
+    Rails reads its secondary dev DBs (cache/queue/cable) by their `database:`
+    name, not via DATABASE_URL. A config/database.yml that resolves those names
+    from ENV (database: <%= ENV.fetch("DATABASE_CACHE_NAME", "...") %>) is then
+    isolated per worktree purely through the env, leaving the tracked file
+    untouched. No-op for URLs whose DB name isn't suffixed for this slot."""
+    suffix = f'_w{slot}'
+    kv = {}
+    for url_key, url_val in read_db_urls(env_file).items():
+        name = db_name_from_url(url_val)
+        if name.endswith(suffix):
+            kv[url_key[: -len('_URL')] + '_NAME'] = name
+    if not kv:
+        return []
+    upsert_env_keys(env_file, kv)
+    return sorted(kv)
+
+
 def clone_local_pg(isolated_url: str, slot: int) -> tuple:
     """Clone the source dev DB into the isolated DB via CREATE DATABASE TEMPLATE.
     Near-instant (file copy) on the same Postgres server. Requires no active
@@ -387,10 +445,17 @@ def process_repo(r):
     for ef in (env_local, env_main):
         if rewrite_env_local(ef, slot):
             print(f'    ✓ {os.path.basename(ef)} rewritten', file=buf)
+    # Mirror *_URL -> *_NAME so an env-driven config/database.yml isolates the
+    # secondary dev DBs (cache/queue/cable) too, with the tracked file untouched.
+    for ef in (env_local, env_main):
+        named = write_db_name_envs(ef, slot)
+        if named:
+            print(f"    ✓ {os.path.basename(ef)} DB name vars set ({', '.join(named)})", file=buf)
     _tlog(repo_name, 'env files rewritten')
 
-    # Rewrite config/database.yml — secondary DBs (cache/queue/cable) are not
-    # overridden by DATABASE_URL, so their hardcoded names must be suffixed.
+    # Legacy fallback for repos whose config/database.yml still hard-codes dev DB
+    # names (no ENV.fetch). Env-driven files contain '<%' and are skipped here —
+    # they're isolated via the *_NAME vars written above instead.
     if rewrite_database_yml(database_yml, slot):
         print(f'    ✓ config/database.yml rewritten', file=buf)
 
