@@ -192,6 +192,54 @@ def audit_database_yml(path):
     return drifted, total
 
 
+def audit_db_name_envs(path):
+    """Ensure each local *_URL has a matching *_NAME var equal to that URL's
+    (suffixed) DB name — what an env-driven config/database.yml reads for its
+    secondary dev DBs. Adds/fixes missing or stale *_NAME lines in place."""
+    drifted = []
+    if not os.path.isfile(path):
+        return drifted, 0
+    with open(path) as f:
+        lines = f.read().split('\n')
+    cur = {}
+    for line in lines:
+        m = re.match(r'^([A-Z_][A-Z0-9_]*)=(.*)$', line)
+        if m:
+            cur[m.group(1)] = m.group(2).strip().strip('"\'')
+    want = {}
+    for key, val in cur.items():
+        if not is_db_url_key(key) or not val:
+            continue
+        db = (urlparse(val).path or '').lstrip('/')
+        if db.endswith(suffix):
+            want[key[: -len('_URL')] + '_NAME'] = db
+    if not want:
+        return drifted, 0
+    fixes = {k: v for k, v in want.items() if cur.get(k) != v}
+    if not fixes:
+        return drifted, len(want)
+    seen = set()
+    out = []
+    for line in lines:
+        m = re.match(r'^([A-Z_][A-Z0-9_]*)=', line)
+        if m and m.group(1) in fixes:
+            k = m.group(1)
+            out.append(f'{k}={fixes[k]}')
+            seen.add(k)
+        else:
+            out.append(line)
+    while out and out[-1] == '':
+        out.pop()
+    for k, v in fixes.items():
+        if k not in seen:
+            out.append(f'{k}={v}')
+    with open(path, 'w') as f:
+        f.write('\n'.join(out) + '\n')
+    for k, v in fixes.items():
+        drifted.append((k, cur.get(k, '(missing)'), v))
+    return drifted, len(want)
+
+
 exit_code = 0
 total_repos = 0
 total_drifts = 0
@@ -213,6 +261,12 @@ for r in repos:
 
     for ef in (env_local, env_main, scripts_db_env):
         d, t = audit_env_file(ef)
+        repo_total += t
+        for key, old, new in d:
+            repo_drift.append((os.path.basename(ef), key, old, new))
+
+    for ef in (env_local, env_main):
+        d, t = audit_db_name_envs(ef)
         repo_total += t
         for key, old, new in d:
             repo_drift.append((os.path.basename(ef), key, old, new))
