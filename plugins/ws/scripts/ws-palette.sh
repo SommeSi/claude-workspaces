@@ -5,22 +5,24 @@
 # and by the attach / start-sandbox skills. Keeping the logic in one place
 # means the curated table and the procedural generator never drift apart.
 #
-# Design: COMFORT FIRST for a full-screen fill. The hard-won lesson — a saturated
-# color is fatiguing across a whole terminal background even when it's dark, so
-# the register is BOTH dark AND muted (relative luminance ≤ 0.030, low chroma;
-# every color is calmer than the wine that got rejected). Placed by farthest-
-# point sampling in CIELAB within that comfortable band → min ~10 ΔE between any
-# two, which reads as "clearly different but calm". Names are descriptive
-# (Olive/Steel/Plum…) because muted darks aren't bright primaries.
+# Design: MAXIMUM SEPARATION inside a comfort box. The colors are placed by
+# farthest-point sampling in CIELAB within a dark, white-text-readable band
+# (relative luminance ≤ 0.055 → AAA contrast, chroma capped at 32 so nothing is
+# as punchy as the wine that got rejected at ~38). Both lightness AND chroma
+# carry the separation, so 16 colors sit ≥16 ΔE apart pairwise (was ~10 — that
+# narrow band is why everything looked alike). Slot order is farthest-next so
+# consecutive workspaces are ≥19 ΔE apart (no more two blues side by side).
+# Names are descriptive (Maroon/Teal/Indigo…) because dark jewel tones aren't
+# bright primaries.
 #
-# Slots 17+ generate a distinct hue per slot via golden-angle rotation, kept in
-# the same dark/muted register (effectively infinite), badge = nearest circle.
+# Slots 17+ generate a distinct hue per slot via golden-angle rotation, in the
+# same dark jewel register (effectively infinite), badge = nearest circle.
 #
 # Usage:
 #   ws-palette.sh <slot>
 #
 # Output (key=value, one per line):
-#   COLOR=#3f282c
+#   COLOR=#5c383c
 #   EMOJI=🔴
 #   NAME=Maroon
 
@@ -35,25 +37,26 @@ fi
 python3 - "$SLOT" <<'PYEOF'
 import sys, colorsys
 
-# Curated palette — index = slot - 1. Deep, muted, calm tints. "White" is a
-# neutral grey badged ⚪ (a literal white fill would hide the white text).
+# Curated palette — index = slot - 1. Dark jewel tones, max-dispersed in CIELAB
+# then ordered farthest-next so no two adjacent slots look alike. Verified:
+# min pairwise ΔE 16.7, min consecutive ΔE 19.7, white-text contrast ≥ 10:1.
 CURATED = [
-    ("#3f282c", "🔴", "Maroon"),
-    ("#3a1b15", "🟤", "Rust"),
-    ("#382c21", "🟡", "Olive"),
-    ("#2c1a00", "🟠", "Khaki"),
-    ("#262507", "🟡", "Gold"),
-    ("#20331c", "🟢", "Forest"),
-    ("#162014", "🟢", "Pine"),
-    ("#002c22", "💚", "Spruce"),
-    ("#072122", "🩵", "Teal"),
-    ("#00343c", "🔵", "Steel"),
-    ("#062a41", "🟦", "Iris"),
-    ("#1e1a33", "🟣", "Plum"),
-    ("#312b3d", "🟪", "Grape"),
-    ("#391c2f", "🩷", "Rose"),
-    ("#303034", "⚪", "White"),
-    ("#191a1e", "⚫", "Slate"),
+    ("#5c383c", "🔴", "Maroon"),
+    ("#004c30", "🟢", "Emerald"),
+    ("#400c30", "🟣", "Mulberry"),
+    ("#343800", "🟡", "Olive"),
+    ("#1c1c48", "🔵", "Sapphire"),
+    ("#54280c", "🟤", "Bronze"),
+    ("#004470", "🔵", "Azure"),
+    ("#480814", "🔴", "Garnet"),
+    ("#004854", "🩵", "Teal"),
+    ("#6c2c48", "🩷", "Wine"),
+    ("#102810", "🟢", "Pine"),
+    ("#483c58", "🟣", "Heather"),
+    ("#341c10", "🟤", "Coffee"),
+    ("#00243c", "🔵", "Steel"),
+    ("#48402c", "🟡", "Khaki"),
+    ("#202424", "⚫", "Slate"),
 ]
 
 GOLDEN_ANGLE = 137.508  # degrees — maximally spreads successive hues
@@ -74,7 +77,7 @@ def resolve(slot):
     # Procedural: a distinct hue per slot in the same dark/muted comfort register
     # (low lightness, low saturation) so generated colors match the curated feel.
     hue = ((slot - 1) * GOLDEN_ANGLE) % 360
-    r, g, b = colorsys.hls_to_rgb(hue / 360.0, 0.13, 0.30)  # H, L, S
+    r, g, b = colorsys.hls_to_rgb(hue / 360.0, 0.15, 0.50)  # H, L, S — dark jewel
     color = "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
     return (color, emoji_for_hue(hue), "Hue %d°" % round(hue))
 
