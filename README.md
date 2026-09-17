@@ -52,7 +52,7 @@ This clones the latest from GitHub and updates the local cache. Restart Claude C
 | `/workspace:start-sandbox` | Create a lightweight workspace without a repo (mkdir + git init) |
 | `/workspace:resume` | Load workspace context, color terminal, show status |
 | `/workspace:list` | List all active workspaces with status, ports, and goals |
-| `/workspace:open` | Open the dev layout — WezTerm panes, dev servers, Claude tab |
+| `/workspace:open` | Open the dev layout — WezTerm panes, background servers, or VS Code with integrated terminals + Claude tab |
 | `/workspace:attach` | Attach a workspace to an existing directory (no worktree) |
 | `/workspace:finish` | Finalize workspace — safety checks, capture learnings, cleanup |
 | `/workspace:auto-login` | Auto-login to your local dev app via browser MCP *(separate plugin)* |
@@ -324,6 +324,30 @@ Plus a separate **Claude tab** that auto-starts with `/workspace:resume`.
 
 The layout goes fullscreen automatically on macOS (native fullscreen via AppleScript).
 
+## VS Code mode
+
+`/workspace:open` → option **3. VS Code** opens the workspace's `<slug>.code-workspace` in VS Code instead of a WezTerm window:
+
+- each pane with a `cmd` becomes a VS Code task (`runOn: folderOpen`) running in its own integrated terminal — `$PORT`, `$SLOT`, `$BRANCH` are substituted
+- a Claude Code tab opens automatically (`vscode://anthropic.claude-code/open`, requires the Claude Code extension)
+- existing folders, settings and your own tasks are kept; only tasks labelled `ws: …` are managed by the plugin
+- single-repo workspaces get a `.code-workspace` created on first open
+
+On first launch VS Code asks **"Allow automatic tasks"** — choose Allow. Requires the `code` CLI (VS Code → *Shell Command: Install 'code' command in PATH*).
+
+## Per-turn changed files recap
+
+At the end of every Claude turn inside a workspace, a message lists the files Claude changed during that turn, each linking to `vscode://file/…` to open it in VS Code:
+
+```
+📝 3 fichiers modifiés ce tour
+  back   M app/models/account.rb
+  front  A src/features/account/AccountCard.tsx
+  front  D src/old.ts
+```
+
+`M` modified · `A` added · `D` deleted · `R` restored to its committed state. Files that were already dirty before your prompt and untouched by Claude are not listed. Works in the CLI and the VS Code extension (hooks `UserPromptSubmit` + `Stop`, script `ws-turn.sh`).
+
 ---
 
 ## Desktop notifications
@@ -475,6 +499,7 @@ Key design decisions:
 - A terminal supporting OSC 11 (WezTerm, iTerm2, Kitty, Windows Terminal, most modern terminals)
 - macOS, Linux, or WSL
 - [WezTerm](https://wezfurlong.org/wezterm/) (optional, for `/workspace:open` layout)
+- [VS Code](https://code.visualstudio.com/) with the `code` CLI and the Claude Code extension (optional, for `/workspace:open` VS Code mode)
 
 ## License
 

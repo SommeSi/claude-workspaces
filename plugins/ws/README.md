@@ -18,7 +18,7 @@ Each workspace gets:
 | `/workspace:list` | List all active workspaces with status |
 | `/workspace:resume` | Load workspace context and color terminal |
 | `/workspace:attach` | Attach a workspace to an existing directory (no worktree, no new dir) |
-| `/workspace:open` | Open (or reopen) the terminal layout — WezTerm panes, servers, Claude tab |
+| `/workspace:open` | Open (or reopen) the dev environment — WezTerm panes, background servers, or VS Code + Claude tab |
 | `/workspace:finish` | Finalize workspace — safety checks, cleanup |
 
 ## Setup
@@ -99,6 +99,31 @@ Add a `terminal` section to auto-open a WezTerm window with dev servers when cre
 ```
 
 Use `/workspace:open` to launch or reopen the layout at any time.
+
+### VS Code mode
+
+`/workspace:open` → option **3. VS Code** opens the workspace's `<slug>.code-workspace` in VS Code instead of a WezTerm window:
+
+- each pane with a `cmd` becomes a VS Code task (`runOn: folderOpen`) running in its own integrated terminal — `$PORT`, `$SLOT`, `$BRANCH` are substituted
+- a Claude Code tab opens automatically (`vscode://anthropic.claude-code/open`, requires the Claude Code extension)
+- existing folders, settings and your own tasks are kept; only tasks labelled `ws: …` are managed by the plugin
+- single-repo workspaces get a `.code-workspace` created on first open
+
+On first launch VS Code asks **"Allow automatic tasks"** — choose Allow. Requires the `code` CLI (VS Code → *Shell Command: Install 'code' command in PATH*).
+
+### Per-turn changed files recap
+
+At the end of every Claude turn inside a workspace, a message lists the files Claude changed during that turn, each linking to `vscode://file/…` to open it in VS Code:
+
+```
+📝 3 fichiers modifiés ce tour
+  back   M app/models/account.rb
+  front  A src/features/account/AccountCard.tsx
+  front  D src/old.ts
+```
+
+`M` modified · `A` added · `D` deleted · `R` restored to its committed state. Files that were already dirty before your prompt and untouched by Claude are not listed. Works in the CLI and the VS Code extension (hooks `UserPromptSubmit` + `Stop`, script `ws-turn.sh`).
+
 
 ## Requirements
 
