@@ -13,6 +13,11 @@
             "type": "command",
             "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-progress-capture.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-turn.sh\" diff",
+            "timeout": 5
           }
         ]
       }
@@ -36,6 +41,18 @@
           {
             "type": "command",
             "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh\" 'Notification'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-turn.sh\" snapshot",
             "timeout": 5
           }
         ]
