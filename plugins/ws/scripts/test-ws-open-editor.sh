@@ -42,7 +42,8 @@ F="$WS/feat-x.code-workspace"
 [ "$(q "$F" "d['tasks']['tasks'][1]['runOptions']['runOn']")" = "folderOpen" ] || fail "runOn folderOpen"
 [ "$(q "$F" "d['settings']['custom']")" = "1" ] || fail "settings preserved"
 [ "$(q "$F" "len(d['folders'])")" = "2" ] || fail "folders preserved"
-echo "$OUT" | grep -qF "vscode://anthropic.claude-code/open" || fail "claude tab announced"
+echo "$OUT" | grep -qF "right sidebar" || fail "claude sidebar announced"
+[ "$(q "$F" "d['settings']['workbench.secondarySideBar.defaultVisibility']")" = "visible" ] || fail "secondary sidebar visible"
 
 # Idempotent
 bash "$OPEN" "$WS" >/dev/null 2>&1 || fail "second run failed"

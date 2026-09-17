@@ -207,7 +207,7 @@ Note: servers will stop when this Claude session ends.
 
 ## Step 7 — VS Code mode
 
-Open VS Code on the workspace. Each server runs as a VS Code task (`runOn: folderOpen`) in its own integrated terminal, and a Claude Code tab opens via `vscode://anthropic.claude-code/open`.
+Open VS Code on the workspace. Each server runs as a VS Code task (`runOn: folderOpen`) in its own integrated terminal, and the right sidebar (where Claude Code lives) opens by default. Never use the `vscode://anthropic.claude-code/open` URI: it opens Claude as a left editor tab.
 
 ### 7a — Recap and confirm
 
@@ -244,7 +244,7 @@ WS_PANES_JSON='[{"repo":"back","cmd":"bin/dev"},{"repo":"front","cmd":"bun run d
   /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-open-editor.sh" "<workspace_path>"
 ```
 
-The script merges tasks into `<slug>.code-workspace` (existing folders, settings and the user's own tasks are kept; only tasks labelled `ws: …` are replaced), creates the file for single-repo workspaces, launches `code`, then opens the Claude tab.
+The script merges tasks into `<slug>.code-workspace` (existing folders, settings and the user's own tasks are kept; only tasks labelled `ws: …` are replaced), creates the file for single-repo workspaces, then launches `code`.
 
 ### 7c — Summary
 
@@ -253,6 +253,7 @@ Show the script output, then:
 ```
 First launch: VS Code asks "Allow automatic tasks" → choose Allow, otherwise the servers won't start.
 Reopening this .code-workspace later restarts the servers automatically.
+Claude Code is in the right sidebar: click its "Claude Code" tab once, VS Code remembers it for this workspace.
 ```
 
 ---

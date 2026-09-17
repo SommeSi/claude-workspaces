@@ -1,6 +1,6 @@
 #!/bin/bash
 # ws-open-editor.sh — Open a workspace in VS Code: servers as folderOpen tasks
-# in integrated terminals + a Claude Code tab.
+# in integrated terminals + Claude Code in the right sidebar.
 # Usage: ws-open-editor.sh [workspace_path]   (defaults to PWD)
 #
 # Writes/merges <workspace_path>/<slug>.code-workspace:
@@ -15,7 +15,7 @@ set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 LOOKUP_PATH="${1:-$(pwd)}" python3 - <<'PYEOF'
-import json, os, shutil, subprocess, sys, time
+import json, os, shutil, subprocess, sys
 
 registry_path = os.environ.get('WS_REGISTRY') or os.path.expanduser('~/.claude-workspaces/registry.json')
 if not os.path.isfile(registry_path):
@@ -94,6 +94,9 @@ else:
             'titleBar.activeBackground': color, 'titleBar.activeForeground': '#ffffff',
             'statusBar.background': color, 'statusBar.foreground': '#ffffff'}},
     }
+if terminal.get('claude_tab', True):
+    # Claude Code lives in the secondary (right) sidebar; open it by default.
+    doc.setdefault('settings', {}).setdefault('workbench.secondarySideBar.defaultVisibility', 'visible')
 doc.setdefault('tasks', {}).setdefault('version', '2.0.0')
 kept = [t for t in doc['tasks'].get('tasks', []) if not str(t.get('label', '')).startswith('ws: ')]
 doc['tasks']['tasks'] = kept + tasks
@@ -102,7 +105,8 @@ with open(target, 'w') as out:
     out.write('\n')
 
 # --- Launch ---
-claude_uri = 'vscode://anthropic.claude-code/open'
+# No vscode://anthropic.claude-code/open: that URI always opens Claude as a
+# left editor tab and ignores claudeCode.preferredLocation (checked in v2.1.273).
 claude_tab = terminal.get('claude_tab', True)
 if not os.environ.get('WS_EDITOR_NO_LAUNCH'):
     code = shutil.which('code') or next((c for c in (
@@ -111,11 +115,6 @@ if not os.environ.get('WS_EDITOR_NO_LAUNCH'):
     if not code:
         sys.exit("❌ VS Code CLI 'code' not found — in VS Code run: Shell Command: Install 'code' command in PATH")
     subprocess.run([code, target], check=True)
-    if claude_tab:
-        # ponytail: fixed wait for the window to be focused; the URI goes to the active window
-        time.sleep(3)
-        opener = 'open' if sys.platform == 'darwin' else 'xdg-open'
-        subprocess.run([opener, claude_uri], check=False)
 
 print(f'✓ VS Code opened! {emoji} [w{slot}] {branch}')
 print(f'  Workspace file → {target}')
@@ -124,5 +123,5 @@ for t in tasks:
 if not tasks:
     print('  Tasks → none (no panes with a command)')
 if claude_tab:
-    print(f'  Claude tab → {claude_uri}')
+    print('  Claude → right sidebar (click the "Claude Code" tab once, VS Code remembers it)')
 PYEOF

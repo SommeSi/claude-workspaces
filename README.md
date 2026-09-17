@@ -329,7 +329,7 @@ The layout goes fullscreen automatically on macOS (native fullscreen via AppleSc
 `/workspace:open` → option **3. VS Code** opens the workspace's `<slug>.code-workspace` in VS Code instead of a WezTerm window:
 
 - each pane with a `cmd` becomes a VS Code task (`runOn: folderOpen`) running in its own integrated terminal — `$PORT`, `$SLOT`, `$BRANCH` are substituted
-- a Claude Code tab opens automatically (`vscode://anthropic.claude-code/open`, requires the Claude Code extension)
+- the right sidebar opens with Claude Code (requires the Claude Code extension) — click its "Claude Code" tab once, VS Code remembers it for that workspace
 - existing folders, settings and your own tasks are kept; only tasks labelled `ws: …` are managed by the plugin
 - single-repo workspaces get a `.code-workspace` created on first open
 
