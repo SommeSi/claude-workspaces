@@ -224,7 +224,7 @@ Ready to open VS Code for workspace:
     back  → bin/dev
     back  → bin/jobs start
 
-  Claude tab: yes
+  Claude (right sidebar): yes
 
 Launch? [Y/n]
 ```
