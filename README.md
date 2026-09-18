@@ -337,16 +337,18 @@ On first launch VS Code asks **"Allow automatic tasks"** — choose Allow. Requi
 
 ## Per-turn changed files recap
 
-At the end of every Claude turn inside a workspace, a message lists the files Claude changed during that turn, each linking to `vscode://file/…` to open it in VS Code:
+At the end of every Claude turn inside a workspace, a message lists the files Claude edited during that turn:
 
 ```
 📝 3 fichiers modifiés ce tour
-  back   M app/models/account.rb
-  front  A src/features/account/AccountCard.tsx
-  front  D src/old.ts
+  M back/app/models/account.rb
+  A front/src/features/account/AccountCard.tsx
+  D front/src/old.ts
 ```
 
-`M` modified · `A` added · `D` deleted · `R` restored to its committed state. Files that were already dirty before your prompt and untouched by Claude are not listed. Works in the CLI and the VS Code extension (hooks `UserPromptSubmit` + `Stop`, script `ws-turn.sh`).
+`M` edited · `A` added · `D` deleted · `R` written but back to its committed state. Only files Claude actually wrote are listed (recorded from `Edit`/`Write` calls), so unrelated dirty files and test artifacts never show up — capped at 12 lines.
+
+Paths are plain text: the Claude Code UI prints a hook message as raw lines (`Stop says: …`), so markdown links would show as literal URLs instead of being clickable. Works in the CLI and the VS Code extension (hooks `PostToolUse` + `Stop`, script `ws-turn.sh`).
 
 ---
 

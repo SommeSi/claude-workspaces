@@ -16,7 +16,7 @@
           },
           {
             "type": "command",
-            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-turn.sh\" diff",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-turn.sh\" recap",
             "timeout": 5
           }
         ]
@@ -46,13 +46,13 @@
         ]
       }
     ],
-    "UserPromptSubmit": [
+    "PostToolUse": [
       {
-        "matcher": "",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-turn.sh\" snapshot",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-turn.sh\" record",
             "timeout": 5
           }
         ]
