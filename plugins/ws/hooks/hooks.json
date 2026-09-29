@@ -13,6 +13,11 @@
             "type": "command",
             "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-progress-capture.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-turn.sh\" recap",
+            "timeout": 5
           }
         ]
       }
@@ -36,6 +41,18 @@
           {
             "type": "command",
             "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh\" 'Notification'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-turn.sh\" record",
             "timeout": 5
           }
         ]

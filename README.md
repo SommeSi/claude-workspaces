@@ -52,7 +52,7 @@ This clones the latest from GitHub and updates the local cache. Restart Claude C
 | `/workspace:start-sandbox` | Create a lightweight workspace without a repo (mkdir + git init) |
 | `/workspace:resume` | Load workspace context, color terminal, show status |
 | `/workspace:list` | List all active workspaces with status, ports, and goals |
-| `/workspace:open` | Open the dev layout — WezTerm panes, dev servers, Claude tab |
+| `/workspace:open` | Open the dev layout — WezTerm panes, background servers, or VS Code with integrated terminals + Claude tab |
 | `/workspace:attach` | Attach a workspace to an existing directory (no worktree) |
 | `/workspace:finish` | Finalize workspace — safety checks, capture learnings, cleanup |
 | `/workspace:auto-login` | Auto-login to your local dev app via browser MCP *(separate plugin)* |
@@ -324,6 +324,32 @@ Plus a separate **Claude tab** that auto-starts with `/workspace:resume`.
 
 The layout goes fullscreen automatically on macOS (native fullscreen via AppleScript).
 
+## VS Code mode
+
+`/workspace:open` → option **3. VS Code** opens the workspace's `<slug>.code-workspace` in VS Code instead of a WezTerm window:
+
+- each pane with a `cmd` becomes a VS Code task (`runOn: folderOpen`) running in its own integrated terminal — `$PORT`, `$SLOT`, `$BRANCH` are substituted
+- the right sidebar opens with Claude Code (requires the Claude Code extension) — click its "Claude Code" tab once, VS Code remembers it for that workspace
+- existing folders, settings and your own tasks are kept; only tasks labelled `ws: …` are managed by the plugin
+- single-repo workspaces get a `.code-workspace` created on first open
+
+On first launch VS Code asks **"Allow automatic tasks"** — choose Allow. Requires the `code` CLI (VS Code → *Shell Command: Install 'code' command in PATH*).
+
+## Per-turn changed files recap
+
+At the end of every Claude turn inside a workspace, a message lists the files Claude edited during that turn:
+
+```
+📝 3 fichiers modifiés ce tour
+  M back/app/models/account.rb
+  A front/src/features/account/AccountCard.tsx
+  D front/src/old.ts
+```
+
+`M` edited · `A` added · `D` deleted · `R` written but back to its committed state. Only files Claude actually wrote are listed (recorded from `Edit`/`Write` calls), so unrelated dirty files and test artifacts never show up — capped at 12 lines.
+
+Paths are plain text: the Claude Code UI prints a hook message as raw lines (`Stop says: …`), so markdown links would show as literal URLs instead of being clickable. Works in the CLI and the VS Code extension (hooks `PostToolUse` + `Stop`, script `ws-turn.sh`).
+
 ---
 
 ## Desktop notifications
@@ -475,6 +501,7 @@ Key design decisions:
 - A terminal supporting OSC 11 (WezTerm, iTerm2, Kitty, Windows Terminal, most modern terminals)
 - macOS, Linux, or WSL
 - [WezTerm](https://wezfurlong.org/wezterm/) (optional, for `/workspace:open` layout)
+- [VS Code](https://code.visualstudio.com/) with the `code` CLI and the Claude Code extension (optional, for `/workspace:open` VS Code mode)
 
 ## License
 

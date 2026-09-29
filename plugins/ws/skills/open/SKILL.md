@@ -1,13 +1,13 @@
 ---
 name: open
-description: "Open (or reopen) the terminal layout for a workspace — WezTerm panes, dev servers, Claude tab. Use when the user wants to launch their dev environment, reopen after a reboot, or says 'open workspace', 'launch servers', 'open layout'."
+description: "Open (or reopen) the dev environment for a workspace — WezTerm panes, background servers, or VS Code with servers in integrated terminals and a Claude Code tab. Use when the user wants to launch their dev environment, reopen after a reboot, or says 'open workspace', 'launch servers', 'open layout', 'open in vs code'."
 user_invocable: true
-trigger: "open workspace, launch servers, open layout, open dev, reopen, wezterm layout"
+trigger: "open workspace, launch servers, open layout, open dev, reopen, wezterm layout, vs code, editor"
 ---
 
 **Respond in the user's language.**
 
-You are opening (or reopening) the terminal layout for an existing workspace. This creates a WezTerm window with panes running dev servers and optionally a Claude Code tab.
+You are opening (or reopening) the dev environment for an existing workspace: a WezTerm window with panes running dev servers, servers in the background, or VS Code with servers in integrated terminals — each optionally with a Claude Code tab.
 
 ---
 
@@ -35,11 +35,7 @@ If no match is found, ask the user which workspace to open (show the list from r
 cat <project_root>/.claude-workspaces.json 2>/dev/null
 ```
 
-If no config exists, or if the config has no `terminal` section, tell the user:
-
-> No terminal layout configured. Add a `terminal` section to `.claude-workspaces.json`. See the plugin docs for the format.
-
-And stop.
+If no config exists, or if the config has no `terminal` section, the WezTerm mode is unavailable. Background and VS Code modes still work (servers are detected, see Step 6a).
 
 ### 1d — Choose launch mode
 
@@ -48,11 +44,18 @@ Ask the user with a select:
 > How do you want to launch the servers?
 > 1. WezTerm — separate terminal panes (requires WezTerm)
 > 2. Background — launch servers as background processes in this Claude session
+> 3. VS Code — open the editor with servers in integrated terminals + Claude Code tab
 
 If **1** → continue to Step 2 (WezTerm flow).
 If **2** → skip to Step 6 (Background flow).
+If **3** → skip to Step 7 (VS Code flow).
 
-If the config has a `terminal` section with `type: "wezterm"`, show option 1 first. If no `terminal` section, only show option 2.
+If the config has a `terminal` section with `type: "wezterm"`, show option 1 first. If no `terminal` section, hide option 1 and renumber the remaining options sequentially (Background becomes 1, VS Code becomes 2) — route by the option the user picked, not by the fixed numbers shown above.
+Only show option 3 (or its renumbered position) if the VS Code CLI exists:
+
+```bash
+command -v code >/dev/null || test -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" && echo "found" || echo "not found"
+```
 
 ---
 
@@ -202,6 +205,59 @@ Note: servers will stop when this Claude session ends.
 
 ---
 
+## Step 7 — VS Code mode
+
+Open VS Code on the workspace. Each server runs as a VS Code task (`runOn: folderOpen`) in its own integrated terminal, and the right sidebar (where Claude Code lives) opens by default. Never use the `vscode://anthropic.claude-code/open` URI: it opens Claude as a left editor tab.
+
+### 7a — Recap and confirm
+
+Servers come from `terminal.panes` (panes with `cmd: null` are skipped — VS Code always has a terminal). If there is no `terminal` section, detect them as in Step 6a.
+
+```
+Ready to open VS Code for workspace:
+
+  🔴 [w4] feat/polo/disbursement-account
+  File: /Users/you/workspaces/feat-polo-disbursement-account/feat-polo-disbursement-account.code-workspace
+
+  Tasks (integrated terminals):
+    front → bun run dev
+    back  → bin/dev
+    back  → bin/jobs start
+
+  Claude (right sidebar): yes
+
+Launch? [Y/n]
+```
+
+Same accepted answers as Step 3.
+
+### 7b — Open
+
+```bash
+/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-open-editor.sh" "<workspace_path>"
+```
+
+If servers were detected (no `terminal` section), pass them in the same format as `terminal.panes`:
+
+```bash
+WS_PANES_JSON='[{"repo":"back","cmd":"bin/dev"},{"repo":"front","cmd":"bun run dev --port $PORT"}]' \
+  /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-open-editor.sh" "<workspace_path>"
+```
+
+The script merges tasks into `<slug>.code-workspace` (existing folders, settings and the user's own tasks are kept; only tasks labelled `ws: …` are replaced), creates the file for single-repo workspaces, then launches `code`.
+
+### 7c — Summary
+
+Show the script output, then:
+
+```
+First launch: VS Code asks "Allow automatic tasks" → choose Allow, otherwise the servers won't start.
+Reopening this .code-workspace later restarts the servers automatically.
+Claude Code is in the right sidebar: click its "Claude Code" tab once, VS Code remembers it for this workspace.
+```
+
+---
+
 ## Rules
 
 - **Always confirm before launching.** Show the recap and wait for approval.
@@ -209,3 +265,4 @@ Note: servers will stop when this Claude session ends.
 - **Variable substitution** in commands follows the same rules as hook commands.
 - **WezTerm mode**: check for WezTerm CLI before attempting layout. Fewer than 4 panes is fine — adapt the grid.
 - **Background mode**: warn that servers stop when the Claude session ends.
+- **VS Code mode**: VS Code only (not Cursor). Never edit `ws-open.sh` behaviour from this flow.
