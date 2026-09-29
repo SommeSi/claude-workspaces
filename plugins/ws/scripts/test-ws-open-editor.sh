@@ -79,4 +79,37 @@ OUT=$(bash "$OPEN" "$SOLO" 2>&1) || fail "no panes must not fail"
 # Unknown workspace → exit 1
 bash "$OPEN" "$TMP/nowhere" >/dev/null 2>&1 && fail "unknown workspace must fail"
 
+# branch: null (sandbox/attach registry entry) + a pane with $BRANCH → no crash
+NB="$TMP/nobranch"; mkdir -p "$NB"
+echo '{ "repos": [{"name":"app","origin":".","port_base":4100}] }' > "$NB/.claude-workspaces.json"
+python3 - "$WS_REGISTRY" "$NB" <<'EOF'
+import json, sys
+p, nb = sys.argv[1], sys.argv[2]
+r = json.load(open(p))
+r['workspaces']['6'] = {"slug": "nb", "branch": None, "color": "#000000", "emoji": "⚪",
+    "project_root": nb, "workspace_path": nb, "repos": [{"name": "app", "path": nb, "port": None}]}
+json.dump(r, open(p, 'w'))
+EOF
+OUT=$(WS_PANES_JSON='[{"repo":".","cmd":"npm run dev -- --port $PORT ($BRANCH)"}]' bash "$OPEN" "$NB" 2>&1) || fail "branch:null must not crash: $OUT"
+NBF="$NB/nb.code-workspace"
+[ "$(q "$NBF" "d['tasks']['tasks'][0]['command']")" = "npm run dev -- --port  (nb)" ] || fail "port None -> empty, branch None -> slug fallback: $(q "$NBF" "d['tasks']['tasks'][0]['command']")"
+
+# Malformed / hand-edited (JSONC-style) .code-workspace → clean error, not a traceback
+BAD="$TMP/bad"; mkdir -p "$BAD"
+echo '{ "repos": [{"name":"app","origin":".","port_base":4200}] }' > "$BAD/.claude-workspaces.json"
+python3 - "$WS_REGISTRY" "$BAD" <<'EOF'
+import json, sys
+p, bad = sys.argv[1], sys.argv[2]
+r = json.load(open(p))
+r['workspaces']['7'] = {"slug": "bad", "branch": "main", "color": "#111111", "emoji": "⚫",
+    "project_root": bad, "workspace_path": bad, "repos": [{"name": "app", "path": bad, "port": 4200}]}
+json.dump(r, open(p, 'w'))
+EOF
+printf '{ "folders": [], /* comment */ }' > "$BAD/bad.code-workspace"
+OUT=$(bash "$OPEN" "$BAD" 2>&1); RC=$?
+[ "$RC" -ne 0 ] || fail "malformed .code-workspace must fail"
+echo "$OUT" | grep -qF "not valid JSON" || fail "malformed .code-workspace must give a clean error, got: $OUT"
+echo "$OUT" | grep -qF "Traceback" && fail "malformed .code-workspace must not dump a raw traceback"
+true
+
 echo "✓ all ws-open-editor checks passed"

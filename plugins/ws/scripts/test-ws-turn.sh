@@ -76,4 +76,26 @@ OUT=$(record "$TMP/elsewhere/z.rb" s2)
 OUT=$(echo 'not json' | bash "$TURN" recap; echo "rc=$?")
 [ "$OUT" = "rc=0" ] || fail "garbage input must exit 0 silently"
 
+# Gitignored file written by Claude → 'A', not 'R' (git omits ignored paths by
+# default, which used to read as "reverted to committed state")
+echo 'ignored.rb' > "$WS/back/.gitignore"
+git -C "$WS/back" add .gitignore && git -C "$WS/back" -c user.email=t@t -c user.name=t commit -qm gitignore
+echo new > "$WS/back/ignored.rb"; record "$WS/back/ignored.rb" s3
+OUT=$(recap "$WS/back" s3); has "A back/ignored.rb"
+
+# Registry fallback: workspace root has no CLAUDE.local.md ancestor, but the
+# registry maps it (same fallback as ws-progress-capture.sh)
+NOROOT="$TMP/noroot"; mkdir -p "$NOROOT/back"
+git -C "$NOROOT/back" init -q
+echo v1 > "$NOROOT/back/x.rb"
+git -C "$NOROOT/back" add . && git -C "$NOROOT/back" -c user.email=t@t -c user.name=t commit -qm init
+echo v2 > "$NOROOT/back/x.rb"
+cat > "$TMP/registry.json" <<EOF
+{ "workspaces": { "9": { "workspace_path": "$NOROOT", "repos": [] } } }
+EOF
+OUT=$(WS_REGISTRY="$TMP/registry.json" record "$NOROOT/back/x.rb" s4)
+[ -z "$OUT" ] || fail "registry-fallback record must print nothing"
+OUT=$(WS_REGISTRY="$TMP/registry.json" recap "$NOROOT/back" s4)
+has "M back/x.rb"
+
 echo "✓ all ws-turn checks passed"

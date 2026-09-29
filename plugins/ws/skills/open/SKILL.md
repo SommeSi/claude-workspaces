@@ -50,8 +50,8 @@ If **1** → continue to Step 2 (WezTerm flow).
 If **2** → skip to Step 6 (Background flow).
 If **3** → skip to Step 7 (VS Code flow).
 
-If the config has a `terminal` section with `type: "wezterm"`, show option 1 first. If no `terminal` section, hide option 1.
-Only show option 3 if the VS Code CLI exists:
+If the config has a `terminal` section with `type: "wezterm"`, show option 1 first. If no `terminal` section, hide option 1 and renumber the remaining options sequentially (Background becomes 1, VS Code becomes 2) — route by the option the user picked, not by the fixed numbers shown above.
+Only show option 3 (or its renumbered position) if the VS Code CLI exists:
 
 ```bash
 command -v code >/dev/null || test -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" && echo "found" || echo "not found"

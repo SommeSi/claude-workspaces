@@ -36,7 +36,7 @@ if not best:
 
 ws_path = best['workspace_path']
 slot, emoji, color = str(best['slot']), best.get('emoji', ''), best.get('color', '')
-branch = best.get('branch', best.get('slug', ''))
+branch = best.get('branch') or best.get('slug') or ''
 slug = best.get('slug') or branch.replace('/', '-')
 repos = best.get('repos', [])
 
@@ -66,7 +66,7 @@ for pane in panes:
     if not cmd:
         continue  # plain terminal pane: VS Code always has one
     repo = repo_for(name)
-    port = str(repo.get('port', '')) if repo else ''
+    port = str(repo.get('port') or '') if repo else ''
     cmd = cmd.replace('$PORT', port).replace('$SLOT', slot).replace('$BRANCH', branch)
     tasks.append({
         'label': f'ws: {name} — {cmd}',
@@ -81,20 +81,28 @@ for pane in panes:
 
 # --- Merge into <slug>.code-workspace ---
 target = os.path.join(ws_path, f'{slug}.code-workspace')
+claude_tab = terminal.get('claude_tab', True)
 if os.path.isfile(target):
-    doc = json.load(open(target))
+    try:
+        doc = json.load(open(target))
+    except json.JSONDecodeError as e:
+        # VS Code tolerates comments/trailing commas in .code-workspace; we don't.
+        sys.exit(f'❌ {target} is not valid JSON ({e}) — remove any comments/trailing commas and retry')
 else:
     folders = []
     for r in repos:
-        rel = os.path.relpath(r['path'], ws_path)
-        folders.append({'path': rel, 'name': f'{emoji} {r["name"]}'.strip()})
+        rp = r.get('path')
+        if not rp:
+            continue
+        rel = os.path.relpath(rp, ws_path)
+        folders.append({'path': rel, 'name': f'{emoji} {r.get("name", "")}'.strip()})
     doc = {
         'folders': folders or [{'path': '.'}],
         'settings': {'workbench.colorCustomizations': {
             'titleBar.activeBackground': color, 'titleBar.activeForeground': '#ffffff',
             'statusBar.background': color, 'statusBar.foreground': '#ffffff'}},
     }
-if terminal.get('claude_tab', True):
+if claude_tab:
     # Claude Code lives in the secondary (right) sidebar; open it by default.
     doc.setdefault('settings', {}).setdefault('workbench.secondarySideBar.defaultVisibility', 'visible')
 doc.setdefault('tasks', {}).setdefault('version', '2.0.0')
@@ -107,14 +115,16 @@ with open(target, 'w') as out:
 # --- Launch ---
 # No vscode://anthropic.claude-code/open: that URI always opens Claude as a
 # left editor tab and ignores claudeCode.preferredLocation (checked in v2.1.273).
-claude_tab = terminal.get('claude_tab', True)
 if not os.environ.get('WS_EDITOR_NO_LAUNCH'):
     code = shutil.which('code') or next((c for c in (
         '/usr/local/bin/code',
         '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code') if os.path.exists(c)), None)
     if not code:
         sys.exit("❌ VS Code CLI 'code' not found — in VS Code run: Shell Command: Install 'code' command in PATH")
-    subprocess.run([code, target], check=True)
+    try:
+        subprocess.run([code, target], check=True)
+    except subprocess.CalledProcessError as e:
+        sys.exit(f'❌ VS Code failed to open the workspace (exit {e.returncode})')
 
 print(f'✓ VS Code opened! {emoji} [w{slot}] {branch}')
 print(f'  Workspace file → {target}')
