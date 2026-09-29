@@ -44,6 +44,7 @@ F="$WS/feat-x.code-workspace"
 [ "$(q "$F" "len(d['folders'])")" = "2" ] || fail "folders preserved"
 echo "$OUT" | grep -qF "right sidebar" || fail "claude sidebar announced"
 [ "$(q "$F" "d['settings']['workbench.secondarySideBar.defaultVisibility']")" = "visible" ] || fail "secondary sidebar visible"
+[ "$(q "$F" "d['settings']['task.allowAutomaticTasks']")" = "on" ] || fail "automatic tasks allowed"
 
 # Idempotent
 bash "$OPEN" "$WS" >/dev/null 2>&1 || fail "second run failed"

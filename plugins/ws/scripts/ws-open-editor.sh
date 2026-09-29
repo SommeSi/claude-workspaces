@@ -105,6 +105,9 @@ else:
 if claude_tab:
     # Claude Code lives in the secondary (right) sidebar; open it by default.
     doc.setdefault('settings', {}).setdefault('workbench.secondarySideBar.defaultVisibility', 'visible')
+if tasks:
+    # What VS Code's one-shot "Allow automatic tasks" prompt writes; dismiss it once and folderOpen never fires.
+    doc.setdefault('settings', {}).setdefault('task.allowAutomaticTasks', 'on')
 doc.setdefault('tasks', {}).setdefault('version', '2.0.0')
 kept = [t for t in doc['tasks'].get('tasks', []) if not str(t.get('label', '')).startswith('ws: ')]
 doc['tasks']['tasks'] = kept + tasks
