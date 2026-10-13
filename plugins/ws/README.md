@@ -70,6 +70,8 @@ For multi-repo projects, external repos (repos outside the current git root) sho
 }
 ```
 
+`origin` can also be a list of candidate paths, e.g. `["../web", "../../web"]`: the first one that exists is used, so devs with different clone layouts can share one config.
+
 The local file merges into the shared config — repos are matched by `name`, and any field in the local entry overrides the shared one. If a repo is missing `origin`, the plugin will ask for it interactively.
 
 If no config exists, `/workspace:start-worktree` will guide you through creating both files.

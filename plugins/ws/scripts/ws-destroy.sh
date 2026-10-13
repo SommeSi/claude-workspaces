@@ -59,6 +59,9 @@ if lf and os.path.isfile(lf):
                 repos[name].update(overrides)
     except Exception:
         pass
+_pick = lambda o, root: next((c for c in o if os.path.isdir(os.path.join(root, c))), o[0]) if isinstance(o, list) else o  # origin may list candidate paths
+for r in repos.values():
+    r['origin'] = _pick(r.get('origin', '.'), pr)
 print(json.dumps(list(repos.values())))
 PYEOF
 )

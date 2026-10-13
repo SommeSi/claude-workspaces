@@ -57,6 +57,9 @@ if os.path.isfile(lf):
                 repos[name].update(overrides)
     except Exception:
         pass
+_pick = lambda o, root: next((c for c in o if os.path.isdir(os.path.join(root, c))), o[0]) if isinstance(o, list) else o  # origin may list candidate paths
+for r in repos.values():
+    r['origin'] = _pick(r.get('origin', '.'), '$PROJECT_ROOT')
 include = set(n.strip() for n in os.environ.get('WS_INCLUDE', '').split(',') if n.strip())
 active = [r for r in repos.values() if not r.get('optional') or r.get('name') in include]
 print(json.dumps(active))

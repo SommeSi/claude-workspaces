@@ -100,8 +100,9 @@ if os.path.isfile(local_cfg):
                 repos[name].update(ov)
     except Exception:
         pass
+_pick = lambda o, root: next((c for c in o if os.path.isdir(os.path.join(root, c))), o[0]) if isinstance(o, list) else o  # origin may list candidate paths
 for name, r in repos.items():
-    origin = r.get('origin', '.')
+    origin = _pick(r.get('origin', '.'), project_root)
     if origin == '.':
         origin_abs = project_root
     else:

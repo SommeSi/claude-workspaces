@@ -56,7 +56,13 @@ if os.path.isfile(local_path):
             if repo['name'] in local_repos:
                 repo.update(local_repos[repo['name']])
 
-missing_origins = [r['name'] for r in config.get('repos', []) if 'origin' not in r]
+# origin may be a list of candidate paths: keep the first that exists.
+# A repo whose origin is absent or not found on disk is reported missing.
+for r in config.get('repos', []):
+    if isinstance(r.get('origin'), list):
+        r['origin'] = next((c for c in r['origin'] if os.path.isdir(os.path.join(project_root, c))), None)
+missing_origins = [r['name'] for r in config.get('repos', [])
+                   if not r.get('origin') or not os.path.isdir(os.path.join(project_root, r['origin']))]
 
 # --- Step 4a: registry ---
 reg_path = os.path.expanduser('~/.claude-workspaces/registry.json')

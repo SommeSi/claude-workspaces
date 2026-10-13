@@ -74,7 +74,7 @@ fi
 # inside "$(python3 -c "...{...}...")". That subtle bug made REPO_COUNT stay
 # unset, causing the per-repo loops below to silently skip.
 if [ -n "$CONFIG" ]; then
-  eval "$(CONFIG="$CONFIG" SLOT="$SLOT" PORT_STEP_HINT="10" python3 <<'PYEOF'
+  eval "$(CONFIG="$CONFIG" PROJECT_ROOT="${PROJECT_ROOT:-}" SLOT="$SLOT" PORT_STEP_HINT="10" python3 <<'PYEOF'
 import json, os
 
 config = json.load(open(os.environ['CONFIG']))
@@ -86,13 +86,14 @@ repos = [r for r in repos if not r.get('optional') or r.get('name') in include]
 port_step = config.get('port_step', int(os.environ.get('PORT_STEP_HINT', '10')))
 slot = int(os.environ['SLOT'])
 
+_pick = lambda o, root: next((c for c in o if os.path.isdir(os.path.join(root, c))), o[0]) if isinstance(o, list) else o  # origin may list candidate paths
 repo_info = []
 for r in repos:
     port = r.get('port_base', 3000) + slot * port_step
     repo_info.append({
         'name': r['name'],
         'port': port,
-        'origin': r.get('origin', '.'),
+        'origin': _pick(r.get('origin', '.'), os.environ.get('PROJECT_ROOT', '')),
     })
 
 names = ' '.join(r['name'] for r in repo_info)
@@ -287,6 +288,7 @@ slug = branch.replace('/', '-')
 port_step = config.get('port_step', 10)
 repos = config.get('repos', [])
 project_root = os.environ.get('PROJECT_ROOT', '')
+_pick = lambda o, root: next((c for c in o if os.path.isdir(os.path.join(root, c))), o[0]) if isinstance(o, list) else o  # origin may list candidate paths
 
 # Calculate all ports
 repo_ports = {}
@@ -305,7 +307,7 @@ for r in repos:
         continue
 
     # Find origin path
-    origin = r.get('origin', '.')
+    origin = _pick(r.get('origin', '.'), project_root)
     if origin == '.':
         origin_path = project_root
     else:
