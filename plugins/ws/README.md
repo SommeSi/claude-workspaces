@@ -86,6 +86,7 @@ Add a `notion` section and `/workspace:start-worktree` (with no goal in your mes
 {
   "notion": {
     "data_source": "collection://<data-source-id>",
+    "history_data_source": "collection://<delivery-history-id>",
     "sprint_property": "Sprint",
     "sprint_format": "Sprint {week}",
     "assignee_property": "Assigné à",
@@ -96,6 +97,8 @@ Add a `notion` section and `/workspace:start-worktree` (with no goal in your mes
 ```
 
 `{week}` is the ISO week number of today.
+
+With `history_data_source`, `/workspace:finish` adds one row per merged delivery to that Notion database: attention hours, Claude working hours and calendar days, measured from the transcripts by `scripts/ws-actuals.py` (no double counting across parallel sessions). The `estimation` plugin's `devis` skill reads it to calibrate quotes.
 
 ### Terminal layout (optional, WezTerm)
 

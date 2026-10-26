@@ -136,9 +136,9 @@ Wait for the user's response. Accept: `y`, `yes`, `o`, `oui`, or empty. **Anythi
 
 ---
 
-## Step 4 — Create the workspace (single Bash call)
+## Step 4 — Create the workspace (single Bash call, in the background)
 
-Run the orchestrator. It chains **worktree creation → file generation → DB isolation → post_create hook → registry update → terminal color** in one bash process.
+Run the orchestrator **with `run_in_background: true`** (it takes ~30–60 s: git pulls, DB clones, installs). Right after launching, tell the user in one line that the workspace is being created and that they can keep talking (e.g. describe the feature); do not poll — the completion notification triggers Step 5. It chains **worktree creation → file generation → DB isolation → post_create hook → registry update → terminal color** in one bash process.
 
 ```bash
 WS_INCLUDE="<comma-separated optional repos, or empty>" \

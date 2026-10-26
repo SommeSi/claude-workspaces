@@ -22,6 +22,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="${1:-$PWD}"
 
 CHECK_MERGED="$HERE/ws-check-merged.sh" \
+ACTUALS="$HERE/ws-actuals.py" \
 TARGET="$TARGET" \
 python3 <<'PYEOF'
 import json, os, re, subprocess, sys
@@ -95,6 +96,17 @@ for d in (project_root, ws_path):
     if d and os.path.isfile(os.path.join(d, ".claude-workspaces.json")):
         config_path = os.path.join(d, ".claude-workspaces.json")
         break
+
+# --- Measured cost of the feature, for the Notion delivery history (estimation
+# calibration). Started now, read at the end: it runs alongside the merge checks.
+history, actuals_proc = "", None
+try:
+    history = json.load(open(config_path)).get("notion", {}).get("history_data_source", "") if config_path else ""
+except (OSError, ValueError):
+    pass
+if history and mode != "attached":
+    actuals_proc = subprocess.Popen(["python3", os.environ["ACTUALS"], ws_path, "--json"],
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 
 # --- Per-repo safety checks (parallel — the merge check does a git fetch) -
 import concurrent.futures
@@ -274,5 +286,7 @@ try:
 except OSError:
     pass
 print(f"WS_SPEC={spec}")
+print(f"WS_HISTORY={history}")
+print(f"WS_ACTUALS={actuals_proc.communicate(timeout=60)[0].strip() if actuals_proc else ''}")
 print(f"OVERALL={overall}")
 PYEOF

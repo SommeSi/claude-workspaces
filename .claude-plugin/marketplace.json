@@ -9,7 +9,7 @@
     {
       "name": "workspace",
       "description": "Workspace manager with colored terminals, git worktrees, and per-workspace Claude context",
-      "version": "0.8.15",
+      "version": "0.8.16",
       "author": {
         "name": "sommesi"
       },
@@ -35,6 +35,16 @@
       },
       "source": "./plugins/playground-deploy",
       "category": "development"
+    },
+    {
+      "name": "estimation",
+      "description": "Chiffrer une feature ou un connecteur en « dev IA » (attention humaine, temps Claude, délai), calé sur l'historique réel des livraisons, et rédiger le devis client dans Notion",
+      "version": "1.0.0",
+      "author": {
+        "name": "sommesi"
+      },
+      "source": "./plugins/estimation",
+      "category": "productivity"
     }
   ]
 }
