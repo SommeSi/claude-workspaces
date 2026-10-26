@@ -266,5 +266,13 @@ print(f"WS_MODE={mode}")
 print(f"WS_PROJECT_ROOT={project_root}")
 print(f"WS_CONFIG={config_path}")
 print(f"WS_PORTS={','.join(ports)}")
+# Spec = Notion card URL when the workspace came from a sprint card (used to move it to Staging).
+spec = ""
+try:
+    m = re.search(r"^## Spec\n(\S+)", open(os.path.join(ws_path, "CLAUDE.local.md")).read(), re.M)
+    spec = m.group(1) if m and "notion" in m.group(1) else ""
+except OSError:
+    pass
+print(f"WS_SPEC={spec}")
 print(f"OVERALL={overall}")
 PYEOF

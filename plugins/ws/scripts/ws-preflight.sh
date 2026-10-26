@@ -103,10 +103,14 @@ for r in config.get('repos', []):
         "optional": bool(r.get('optional', False)),
     })
 
+# Slim output: it is read by an LLM, every token costs latency.
+# env_template/terminal/registry are consumed by other scripts, not by callers of this one.
+slim = {k: v for k, v in config.items() if k != 'terminal'}
+slim['repos'] = [{k: v for k, v in r.items() if k != 'env_template'} for r in config.get('repos', [])]
+
 result = {
     "git_root": project_root,
-    "config": config,
-    "registry": registry,
+    "config": slim,
     "free_slot": slot,
     "color": color,
     "emoji": emoji,

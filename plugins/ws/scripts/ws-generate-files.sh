@@ -419,5 +419,31 @@ PYEOF
 fi
 t ".env.local + creds + scripts/db/.env done"
 
+# --- 6. One auto-memory per project ---
+# Claude keys auto memory on the launch directory, so every worktree used to get
+# its own memory dir, orphaned once the worktree was deleted. Point the workspace
+# root and each repo at the project's memory (merge: keep existing settings).
+if [ -n "$PROJECT_ROOT" ]; then
+  MEM_DIR="$HOME/.claude/projects/$(printf '%s' "$PROJECT_ROOT" | sed 's/[^A-Za-z0-9]/-/g')/memory"
+  for d in "$WS_PATH" ${REPO_NAMES[@]+"${REPO_NAMES[@]/#/$WS_PATH/}"}; do
+    [ -d "$d" ] || continue
+    mkdir -p "$d/.claude"
+    F="$d/.claude/settings.local.json" MEM_DIR="$MEM_DIR" python3 <<'PYEOF'
+import json, os
+f = os.environ['F']
+try:
+    settings = json.load(open(f))
+except (OSError, ValueError):
+    settings = {}
+settings['autoMemoryDirectory'] = os.environ['MEM_DIR']
+with open(f, 'w') as out:
+    json.dump(settings, out, indent=2)
+    out.write('\n')
+PYEOF
+  done
+  echo "  ✓ .claude/settings.local.json (memory → $(basename "$(dirname "$MEM_DIR")"))"
+fi
+t "auto-memory dir set"
+
 echo "  ✓ All files generated"
 t "DONE"

@@ -1,7 +1,7 @@
 ---
 name: finish
 description: Finalize and clean up a workspace — safety checks, capture learnings, remove worktree, free slot. Use when the user is done with a feature, wants to clean up, or says "finish", "done", "close workspace", "remove workspace", "clean up".
-allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
+allowed-tools: [Read, Write, Edit, Bash, Grep, Glob, mcp__notion__notion-update-page]
 ---
 
 **Respond in the user's language.**
@@ -21,7 +21,7 @@ Run the preflight. It detects the workspace from the current directory, runs eve
 Parse the output:
 
 - Everything **before** `===WS-FINISH-MACHINE===` is the human recap → show it to the user as-is (you may translate it).
-- Everything **after** is `key=value` data for Step 3: `WS_SLOT`, `WS_PATH`, `WS_SLUG`, `WS_MODE`, `WS_PROJECT_ROOT`, `WS_CONFIG`, `WS_PORTS`, `OVERALL`.
+- Everything **after** is `key=value` data for Step 3: `WS_SLOT`, `WS_PATH`, `WS_SLUG`, `WS_MODE`, `WS_PROJECT_ROOT`, `WS_CONFIG`, `WS_PORTS`, `WS_SPEC`, `OVERALL`.
 
 Handle the edge cases:
 
@@ -54,6 +54,8 @@ CONFIG="<WS_CONFIG>" PROJECT_ROOT="<WS_PROJECT_ROOT>" \
 ```
 
 (If `WS_CONFIG` is empty, omit the `CONFIG=` part — the script will locate it.)
+
+**Notion card → Staging**: if `WS_SPEC` is set **and** `OVERALL=safe` (branch merged), send in the **same message** as the destroy call (parallel, zero added latency): `mcp__notion__notion-update-page` `{"page_id": "<WS_SPEC>", "command": "update_properties", "allow_async": true, "properties": {"Statut": "✅ Staging"}}`. A Notion failure never blocks the teardown.
 
 **Then, silently** (no prompt, non-blocking): if anything genuinely worth remembering came up this session — a correction the user made, a non-obvious project constraint, a useful external resource — save it to the Claude memory directory (one file per fact with proper frontmatter) and add a one-line entry to `MEMORY.md`. Skip anything derivable from code or git history. Never interrupt the flow to ask about this.
 

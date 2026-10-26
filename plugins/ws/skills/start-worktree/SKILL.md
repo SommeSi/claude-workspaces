@@ -1,7 +1,7 @@
 ---
 name: start-worktree
 description: Create a new isolated workspace with git worktree. Use when the user wants to start working on a new feature, bugfix, or task in an isolated branch. Triggers on "new feature", "start working on", "create workspace", "new worktree", "isolate work".
-allowed-tools: [Read, Write, Edit, Bash, Glob, Grep]
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion, mcp__notion__notion-query-data-sources, mcp__notion__notion-update-page]
 ---
 
 **Respond in the user's language.**
@@ -10,15 +10,18 @@ You are creating a new isolated workspace using `git worktree`. Follow the steps
 
 ---
 
-## Step 1 — Preflight (single Bash call)
+## Step 1 — Preflight (already run)
 
-Run the preflight script to gather everything at once — git root, config (shared + local merged), registry, free slot, color, ports:
+The preflight ran when this skill loaded (current git root). Output:
 
-```bash
-/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-preflight.sh" "[project_root_if_known]"
+```json
+!`/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-preflight.sh" 2>/dev/null`
 ```
 
-Omit the argument to auto-detect from current git root.
+If the block above shows a literal `!`-command instead of JSON, injection is unsupported: run the command yourself (one Bash call).
+
+**Do NOT re-run it** — unless the user targets another project than the current directory, then run once:
+`/bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-preflight.sh" "<project_root>"`
 
 ### If the output contains `"error": "not_a_git_repo"`
 
@@ -36,7 +39,7 @@ Ask the user for the missing repo paths and offer to save them to `.claude-works
 ### Otherwise
 
 Parse the JSON output. You now have:
-- `git_root`, `config`, `registry`, `free_slot`, `color`, `emoji`, `repos_with_ports`, `workspaces_root`, `port_step`
+- `git_root`, `config`, `free_slot`, `color`, `emoji`, `repos_with_ports`, `workspaces_root`, `port_step`
 
 Continue to Step 2.
 
@@ -45,6 +48,35 @@ Continue to Step 2.
 ## Step 2 — Derive branch, goal, spec from user message
 
 **DO NOT ask the user for these — extract them from the conversation.**
+
+### Step 2a — Pick a sprint card (only if `config.notion` exists)
+
+Run this **only when** `config.notion` is set **and** the user's message has no clear goal (e.g. just "start worktree"), or mentions the sprint / Notion / "mes cartes". If the user already described the task, skip to the derivation below — no extra call.
+
+1. `week` = ISO week number of today (`%V`, no leading zero). Sprint value = `config.notion.sprint_format` with `{week}` replaced (e.g. `"Sprint {week}"` → `"Sprint 44"`).
+2. **Your very first tool call** — no thinking out loud, no text before it — is **one** call to `mcp__notion__notion-query-data-sources`:
+   ```json
+   {"data": {"mode": "rows", "data_source_url": "<config.notion.data_source>", "limit": 30,
+     "filter": {"type": "group", "operator": "and", "filters": [
+       {"type": "property", "property": "<config.notion.sprint_property>", "propertyType": "multi_select",
+        "operator": "enum_contains", "value": {"type": "exact", "value": "<sprint value>"}},
+       {"type": "property", "property": "<config.notion.assignee_property>", "propertyType": "person",
+        "operator": "person_contains", "value": {"type": "relative", "value": "me"}}
+     ]}}}
+   ```
+3. Drop rows whose `<config.notion.status_property>` is in `config.notion.exclude_status`. Sort by priority (Critical → Low).
+4. **No cards / Notion error** → say so in one line and fall back to the normal derivation (ask for the goal only if the message has none).
+5. Otherwise, immediately `AskUserQuestion` (single-select, max 4 options — top 4 by priority; "Other" covers free text):
+   - label: card title (strip HTML, ≤ 5 words), description: `<Type> · <Feature> · <Priority> · <Statut>`.
+6. From the chosen card:
+   - **Goal** = title + `Description générale` (if any)
+   - **Branch** = `<prefix>/<feature-slug>/task-<ID>-<2–3 title keywords>`, prefix from `Type`: `Bug`→`fix`, `Refacto`→`refactor`, `Documentation`→`docs`, else `feat`; `<ID>` = `userDefined:ID`. **Keep `task-<ID>`** — the GitHub Action moves the card (In Review / Staging / Production) by finding it in the branch name.
+   - **Spec** = card `url`
+7. After the pick, go **straight to the Step 3 recap** in the same reply (no tool call in between).
+
+If the user picks "Other", treat their text as the goal and continue below.
+
+### Step 2b — Derive
 
 - **Goal**: what the user described wanting to do. If unclear, use a short summary.
 - **Branch**: derive from the goal using conventional format (`feat/*`, `fix/*`, `chore/*`, `refactor/*`, `docs/*`, `test/*`, `style/*`, `perf/*`). Extract 2–4 keywords, slugify. **Pure string manipulation — NO tool calls.**
@@ -113,6 +145,8 @@ WS_INCLUDE="<comma-separated optional repos, or empty>" \
 /bin/bash "${CLAUDE_PLUGIN_ROOT}/scripts/ws-create.sh" \
   "<workspace_path>" "<slot>" "<branch>" "<color>" "<emoji>" "<git_root>" "<spec>" "<goal>"
 ```
+
+**If the workspace comes from a Notion card**, send in the **same message** as the Bash call above (parallel, zero added latency) one `mcp__notion__notion-update-page` call: `{"page_id": "<card url>", "command": "update_properties", "allow_async": true, "properties": {"<config.notion.status_property>": "🔄 In Progress"}}`. A Notion failure never blocks creation — mention it in one line at the end.
 
 `WS_INCLUDE` opts optional repos in (see Step 2). Omit it or pass `""` to create only the default (non-optional) repos.
 

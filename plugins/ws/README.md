@@ -20,6 +20,8 @@ Each workspace gets:
 | `/workspace:attach` | Attach a workspace to an existing directory (no worktree, no new dir) |
 | `/workspace:open` | Open (or reopen) the dev environment — WezTerm panes, background servers, or VS Code + Claude tab |
 | `/workspace:finish` | Finalize workspace — safety checks, cleanup |
+| `/workspace:knowledge-review` | Turn captured session lessons into one `.claude/rules/` PR per repo |
+| `/workspace:recall` | Find a past session from a few words, with its resume command |
 
 ## Setup
 
@@ -76,6 +78,25 @@ The local file merges into the shared config — repos are matched by `name`, an
 
 If no config exists, `/workspace:start-worktree` will guide you through creating both files.
 
+### Sprint cards from Notion (optional)
+
+Add a `notion` section and `/workspace:start-worktree` (with no goal in your message) lists the cards assigned to you in the current sprint, then derives branch, goal and spec from the one you pick. Requires the Notion MCP server.
+
+```json
+{
+  "notion": {
+    "data_source": "collection://<data-source-id>",
+    "sprint_property": "Sprint",
+    "sprint_format": "Sprint {week}",
+    "assignee_property": "Assigné à",
+    "status_property": "Statut",
+    "exclude_status": ["✅ Staging", "Production", "Done In Dev"]
+  }
+}
+```
+
+`{week}` is the ISO week number of today.
+
 ### Terminal layout (optional, WezTerm)
 
 Add a `terminal` section to auto-open a WezTerm window with dev servers when creating or reopening a workspace:
@@ -128,6 +149,15 @@ At the end of every Claude turn inside a workspace, a message lists the files Cl
 
 Paths are plain text: the Claude Code UI prints a hook message as raw lines (`Stop says: …`), so markdown links would show as literal URLs instead of being clickable. Works in the CLI and the VS Code extension (hooks `PostToolUse` + `Stop`, script `ws-turn.sh`).
 
+### Team knowledge (automatic)
+
+What a session learns should reach the next sessions, including teammates'. Three pieces:
+
+- **Rules in the repos.** Team lessons live in each repo's `.claude/rules/*.md`. Claude Code loads a rule file natively when the session reads or edits a file matching its `paths:` frontmatter (files without `paths:` load every session). They are shared through git and reviewed in PRs.
+- **Capture.** At the end of every session (≥ 3 user messages), the `SessionEnd` hook forks a detached `claude -p --safe-mode --model sonnet` that reads the transcript and writes the confirmed team lessons to `~/.claude-workspaces/knowledge-inbox/<session>.json`, plus a summary to `~/.claude-workspaces/sessions.jsonl` (used by `/workspace:recall`). The hook returns in ~50 ms; the work runs in the background (log: `~/.claude-workspaces/knowledge-capture.log`). Disable with `WS_KNOWLEDGE_DISABLE=1`.
+- **Landing.** `/git-pr` adds the inbox lessons matching the PR's files (`scripts/ws-knowledge.py match`); `/workspace:knowledge-review` turns the rest into one PR per repo. Nothing merges without a human.
+
+Each workspace also gets `.claude/settings.local.json` with `autoMemoryDirectory` pointing at the project's memory, so personal auto-memory is no longer scattered (and lost) across worktree directories.
 
 ## Requirements
 
