@@ -6,13 +6,20 @@
 3. Their pending post-deploy actions: the repos' GitHub Action opens one `post-deploy`
    issue per merged PR with a "## Déploiement" section (one box per action and environment).
 
+4. With the review watcher on (ws-review-watch.py): their PRs approved and green, ready to
+   merge (`review_merge: "ask"`), the fix agents running, and reviews received that the
+   watcher could not hand to an agent yet.
+
 Zero latency: it reads a cache (~/.claude-workspaces/cache/session-nag.json) and, when
-it is older than 10 min, refreshes it in a detached process for the next session.
+it is older than 10 min, refreshes it in a detached process for the next session; the
+watcher's files are read as they are.
 Event JSON on stdin; prints the hook JSON on stdout.
 """
 import json, os, re, subprocess, sys, time
 
 CACHE = os.path.expanduser("~/.claude-workspaces/cache/session-nag.json")
+WATCH = os.path.expanduser("~/.claude-workspaces/review-watch.json")
+AUTOFIX = os.path.expanduser("~/.claude-workspaces/autofix")
 TTL = 600
 
 
@@ -69,17 +76,62 @@ def pending_envs(body):
     return sorted({env for env in re.findall(r"^- \[ \] (staging|prod) —", body or "", re.M)}, reverse=True)
 
 
+def alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except PermissionError:
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def review_blocks():
+    """What ws-review-watch.py left for the user (ignored when the watcher has not run for a day)."""
+    try:
+        watch = json.load(open(WATCH))
+    except (OSError, ValueError):
+        return []
+    if time.time() - watch.get("at", 0) > 86400:
+        return []
+    prs = sorted(watch.get("prs", {}).values(), key=lambda p: (p["repo"], p["number"]))
+    line = lambda p, extra="": f"#{p['number']} {p['title'][:60]} ({p['repo'].split('/')[1]}){extra} {p['url']}"
+    ready = [line(p) + f" [head {p['head_sha']}]" for p in prs if p.get("action") == "ready"]
+    waiting = [line(p, f" : {p['pending']}") for p in prs if p.get("pending")]
+    running = []
+    for name in sorted(os.listdir(AUTOFIX)) if os.path.isdir(AUTOFIX) else []:
+        if name.endswith(".json"):
+            try:
+                j = json.load(open(os.path.join(AUTOFIX, name)))
+            except (OSError, ValueError):
+                continue
+            if not j.get("finished") and alive(j.get("pid")):
+                running.append(line(j, f", log {os.path.join(AUTOFIX, name[:-5])}.log"))
+    blocks = []
+    if ready:
+        blocks.append(f"✅ {len(ready)} de tes PR approuvée(s) sur leur dernier commit et verte(s) : prête(s) à merger :")
+        blocks += [f"  {l}" for l in ready[:6]]
+    if running:
+        blocks.append(f"🛠 {len(running)} correction(s) de relecture en cours (agent auto) :")
+        blocks += [f"  {l}" for l in running[:6]]
+    if waiting:
+        blocks.append(f"👀 {len(waiting)} relecture(s) reçue(s) pas encore prise(s) en charge :")
+        blocks += [f"  {l}" for l in waiting[:6]]
+    return blocks
+
+
 def main():
     try:
         event = json.load(sys.stdin)
     except ValueError:
         return
     repos = slugs(event.get("cwd") or os.getcwd())
-    if not repos:
+    watch_blocks = review_blocks()
+    if not repos and not watch_blocks:
         return
     cache = load()
     keys = repos + ["org:" + s.split("/")[0] for s in repos]
-    if any(time.time() - cache.get(k, {}).get("at", 0) > TTL for k in keys) and os.fork() == 0:
+    if repos and any(time.time() - cache.get(k, {}).get("at", 0) > TTL for k in keys) and os.fork() == 0:
         os.setsid()
         devnull = os.open(os.devnull, os.O_RDWR)
         for fd in (0, 1, 2):
@@ -114,14 +166,18 @@ def main():
     if lines:
         blocks.append(f"⚠️ {len(lines)} action(s) post-déploiement en attente pour toi :")
         blocks += [f"  {l}" for l in lines[:6]]
+    blocks += watch_blocks
     if not blocks:
         return
     msg = "\n".join(blocks)
+    ready_hint = ("\nPour une PR « prête à merger », propose de la merger et ne le fais que quand l'utilisateur le dit :"
+                  " `gh pr merge <n> -R <owner/repo> --merge --match-head-commit <head>` (merge commit, base develop)."
+                  if any(b.startswith("✅") for b in watch_blocks) else "")
     print(json.dumps({
         "systemMessage": msg,
         "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": msg +
             "\nRappelle ces points en une ligne dans ta première réponse. Si l'utilisateur veut créer une PR alors qu'il a des PR"
-            " assignées à merger, rappelle-lui de les merger d'abord."},
+            " assignées à merger, rappelle-lui de les merger d'abord." + ready_hint},
     }, ensure_ascii=False))
 
 

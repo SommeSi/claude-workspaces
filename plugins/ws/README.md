@@ -175,6 +175,31 @@ It reads a cache refreshed in the background, so it adds no latency. `scripts/ws
 
 Each workspace also gets `.claude/settings.local.json` with `autoMemoryDirectory` pointing at the project's memory, so personal auto-memory is no longer scattered (and lost) across worktree directories.
 
+### Review → correction → merge (opt-in)
+
+A launchd job on the PR **author's** Mac watches their open PRs every 5 min (`scripts/ws-review-watch.py`). Enable it per user in `~/.claude-workspaces/config.json` (never in a repo), then install the job:
+
+```json
+{ "review_autofix": true, "review_merge": "ask" }
+```
+
+```bash
+python3 scripts/ws-review-watch.py install     # uninstall: python3 scripts/ws-review-watch.py uninstall
+python3 scripts/ws-review-watch.py run --dry-run   # what it would do now, changes nothing
+```
+
+Scope: your open, non-draft PRs (`gh search prs --author @me`) in the orgs of your registered projects, **base `develop` only**. Label a PR `no-autofix` to leave it alone.
+
+On each new review or comment from someone else (reviewers, Codex threads) you get a macOS notification (« #1617 relue par Uozak218 : changements demandés, 3 commentaires »), then:
+
+- **Remarks to handle** (unresolved threads, changes requested, a review or PR comment with content) → a headless `claude -p` starts, detached, in the PR's worktree (the workspace on that branch, else a new worktree in `~/.claude-workspaces/autofix/`). It checks each remark first (reviewers and Codex can be wrong), fixes the valid ones, runs the tests of what changed (Rails back: private test DB as in `~/.claude/CLAUDE.md`), commits `fix(review): …`, pushes to the PR branch (never force-push), answers in French in each thread (« Corrigé dans <sha> » / « Pas d'accord : <raison> »), resolves the threads it fixed and re-requests review. **It never merges.** You get its result as a notification. At most 2 agents run at once; one per PR.
+- **Mergeable** = approved by the assignee **on the PR's current head commit** (an approval of an older commit does not count, so no code reaches `develop` without a human approving exactly that code), zero unresolved thread, no failing or pending check, base `develop`:
+  - `"review_merge": "ask"` (default): notification « #N approuvée et verte : prête à merger », and the next session lists it (« prêtes à merger »); Claude merges when you say so.
+  - `"review_merge": "auto"`: the watcher merges with a merge commit (`gh pr merge --merge --match-head-commit <sha>`) and notifies « mergée ».
+- **Approved, checks pending** → waits for the next run. Never merges into `main`.
+
+The session reminders list the PRs ready to merge, the fix agents running and the reviews not yet handed to an agent. Files: state `~/.claude-workspaces/review-watch.json`, watcher log `~/.claude-workspaces/review-watch.log`, one agent's log and result `~/.claude-workspaces/autofix/<repo>-<n>.log` / `.json`. Tests: `python3 -m unittest scripts/test_ws_review_watch.py`.
+
 ## Requirements
 
 - Claude Code
