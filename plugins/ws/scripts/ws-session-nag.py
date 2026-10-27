@@ -2,7 +2,7 @@
 """ws-session-nag.py — SessionStart hook: what the user must do before anything else.
 
 1. PRs assigned to them (as reviewer/merger) still open: merge them before opening new ones.
-2. Their own open PRs without an assignee other than themselves: they can't be merged.
+2. Their own open PRs without an assignee other than themselves: to assign before merging.
 3. Their pending post-deploy actions: the repos' GitHub Action opens one `post-deploy`
    issue per merged PR with a "## Déploiement" section (one box per action and environment).
 
@@ -109,7 +109,7 @@ def main():
         blocks.append(f"🔀 {len(review)} PR assignée(s) à toi à relire et merger, avant d'en ouvrir une nouvelle :")
         blocks += [f"  {l}" for l in review[:6]]
     if unassigned:
-        blocks.append(f"🙋 {len(unassigned)} de tes PR sans relecteur assigné : elle(s) ne pourront pas être mergée(s) :")
+        blocks.append(f"🙋 {len(unassigned)} de tes PR sans relecteur assigné : assigne-les avant de merger :")
         blocks += [f"  {l}" for l in unassigned[:6]]
     if lines:
         blocks.append(f"⚠️ {len(lines)} action(s) post-déploiement en attente pour toi :")
