@@ -1,7 +1,7 @@
 ---
 name: start-worktree
 description: Create a new isolated workspace with git worktree. Use when the user wants to start working on a new feature, bugfix, or task in an isolated branch. Triggers on "new feature", "start working on", "create workspace", "new worktree", "isolate work".
-allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion, mcp__notion__notion-query-data-sources, mcp__notion__notion-update-page]
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion, Skill, mcp__notion__notion-query-data-sources, mcp__notion__notion-update-page, mcp__notion__notion-create-pages, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread]
 ---
 
 **Respond in the user's language.**
@@ -49,12 +49,13 @@ Continue to Step 2.
 
 **DO NOT ask the user for these — extract them from the conversation.**
 
-### Step 2a — Pick a sprint card (only if `config.notion` exists)
+### Step 2a — Pick a starting point: sprint card or client mail (only if `config.notion` or `config.mail` exists)
 
 Run this **only when** `config.notion` is set **and** the user's message has no clear goal (e.g. just "start worktree"), or mentions the sprint / Notion / "mes cartes". If the user already described the task, skip to the derivation below — no extra call.
 
 1. `week` = ISO week number of today (`%V`, no leading zero). Sprint value = `config.notion.sprint_format` with `{week}` replaced (e.g. `"Sprint {week}"` → `"Sprint 44"`).
-2. **Your very first tool call** — no thinking out loud, no text before it — is **one** call to `mcp__notion__notion-query-data-sources`:
+2. **If the preflight output has `sprint_cards.cards`, use them and make no Notion call** (the preflight already queried the API: sprint, assignee, excluded statuses, priority order). Go straight to step 4. If `sprint_cards.error` is set, mention it in one line and fall back to the MCP query below.
+   Otherwise (no token in the keychain), **your very first tool call** — no thinking out loud, no text before it — is **one** call to `mcp__notion__notion-query-data-sources`:
    ```json
    {"data": {"mode": "rows", "data_source_url": "<config.notion.data_source>", "limit": 30,
      "filter": {"type": "group", "operator": "and", "filters": [
@@ -66,8 +67,11 @@ Run this **only when** `config.notion` is set **and** the user's message has no 
    ```
 3. Drop rows whose `<config.notion.status_property>` is in `config.notion.exclude_status`. Sort by priority (Critical → Low).
 4. **No cards / Notion error** → say so in one line and fall back to the normal derivation (ask for the goal only if the message has none).
-5. Otherwise, immediately `AskUserQuestion` (single-select, max 4 options — top 4 by priority; "Other" covers free text):
-   - label: card title (strip HTML, ≤ 5 words), description: `<Type> · <Feature> · <Priority> · <Statut>`.
+   **Client mails** (only if `config.mail` is set): in the **same message** as the Notion MCP call above — or as your very first tool call when the cards came from the preflight — call `mcp__claude_ai_Gmail__search_threads` `{"query": "<config.mail.query>", "pageSize": 10}`. Keep threads whose last message is from outside the company and that don't already read as fixed ("corrigé", "c'est bon", "résolu" from us). Gmail unavailable → skip mails silently.
+5. Otherwise, immediately `AskUserQuestion` (single-select, max 4 options; "Other" covers free text). Mix both sources: up to 2 most recent client mails first, then the top cards by priority to fill 4.
+   - card → label `🗂 <title ≤ 5 words>`, description: `<Type> · <Feature> · <Priority> · <Statut>`;
+   - mail → label `📧 <subject ≤ 5 words>`, description: `<client domain> · <date> · <last sender name>`.
+   **A mail is picked** → invoke the project skill named in `config.mail.skill` (e.g. `bug-from-mail`) on that thread, starting at its thread-reading step: it reads the thread, splits it into bugs, dedupes against Notion and creates the card(s). Then use the created (or existing) card exactly like a picked card in step 6.
 6. From the chosen card:
    - **Goal** = title + `Description générale` (if any)
    - **Branch** = `<prefix>/<feature-slug>/task-<ID>-<2–3 title keywords>`, prefix from `Type`: `Bug`→`fix`, `Refacto`→`refactor`, `Documentation`→`docs`, else `feat`; `<ID>` = `userDefined:ID`. **Keep `task-<ID>`** — the GitHub Action moves the card (In Review / Staging / Production) by finding it in the branch name.

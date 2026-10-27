@@ -56,6 +56,75 @@ if os.path.isfile(local_path):
             if repo['name'] in local_repos:
                 repo.update(local_repos[repo['name']])
 
+# --- Sprint cards straight from the Notion API (in a thread, alongside the rest) ---
+# Saves start-worktree a whole LLM turn. Needs the integration token in the keychain
+# (service claude-workspaces-notion); without it the skill falls back to the Notion MCP.
+# The token is a bot, so "me" = the person whose email is notion_user_email in the
+# per-user ~/.claude-workspaces/config.json (else git's user.email), resolved once via
+# /v1/users and cached. Never in a repo file: teammates would get someone else's cards.
+import threading, urllib.request, datetime
+
+def notion_cards(n):
+    tok = subprocess.run(['security', 'find-generic-password', '-s', 'claude-workspaces-notion', '-a', 'notion', '-w'],
+                         capture_output=True, text=True).stdout.strip()
+    if not tok or not n.get('data_source'):
+        return None
+    def api(path, body=None):
+        req = urllib.request.Request('https://api.notion.com/v1/' + path, method='POST' if body is not None else 'GET',
+                                     data=json.dumps(body).encode() if body is not None else None,
+                                     headers={'Authorization': f'Bearer {tok}', 'Notion-Version': '2025-09-03',
+                                              'Content-Type': 'application/json'})
+        return json.load(urllib.request.urlopen(req, timeout=4))
+    try:
+        user_cfg = json.load(open(os.path.expanduser('~/.claude-workspaces/config.json')))
+    except (OSError, ValueError):
+        user_cfg = {}
+    email = user_cfg.get('notion_user_email') or subprocess.run(['git', 'config', 'user.email'],
+                                                            capture_output=True, text=True).stdout.strip()
+    cache_path = os.path.expanduser('~/.claude-workspaces/cache/notion-users.json')
+    try:
+        users = json.load(open(cache_path))
+    except (OSError, ValueError):
+        users = {}
+    if email not in users:
+        users = {u['person']['email']: u['id'] for u in api('users?page_size=100')['results']
+                 if u.get('type') == 'person' and u.get('person', {}).get('email')}
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        json.dump(users, open(cache_path, 'w'))
+    uid = users.get(email)
+    if not uid:
+        return {"error": f"no Notion user with email {email} (set notion_user_email in ~/.claude-workspaces/config.json)"}
+    sprint = n.get('sprint_format', 'Sprint {week}').replace('{week}', str(datetime.date.today().isocalendar()[1]))
+    rows = api(f"data_sources/{n['data_source'].replace('collection://', '')}/query", {"page_size": 50, "filter": {"and": [
+        {"property": n.get('sprint_property', 'Sprint'), "multi_select": {"contains": sprint}},
+        {"property": n.get('assignee_property', 'Assigné à'), "people": {"contains": uid}}]}})['results']
+    def val(p):
+        t = p.get('type')
+        if t in ('title', 'rich_text'):
+            return ''.join(x.get('plain_text', '') for x in p[t])[:300]
+        if t == 'select':
+            return (p['select'] or {}).get('name', '')
+        if t == 'unique_id':
+            return f"{p['unique_id'].get('prefix') or ''}-{p['unique_id']['number']}".lstrip('-')
+        return ''
+    status = n.get('status_property', 'Statut')
+    prio = ['Critical', 'High', 'Medium', 'Low']
+    cards = [{k: val(r['properties'][k]) for k in ('ID', 'Tâche', 'Type', 'Priorité', status, 'Description générale')
+              if k in r['properties']} | {'url': r['url']} for r in rows]
+    cards = [c for c in cards if c.get(status) not in n.get('exclude_status', [])]
+    cards.sort(key=lambda c: next((i for i, p in enumerate(prio) if p in c.get('Priorité', '')), 9))
+    return {"sprint": sprint, "cards": cards}
+
+cards_box = {}
+def _fetch():
+    try:
+        cards_box['v'] = notion_cards(config.get('notion') or {})
+    except Exception as e:  # never break the preflight for Notion
+        cards_box['v'] = {"error": f"notion: {e}"}
+cards_thread = threading.Thread(target=_fetch, daemon=True) if config.get('notion') else None
+if cards_thread:
+    cards_thread.start()
+
 # origin may be a list of candidate paths: keep the first that exists.
 # A repo whose origin is absent or not found on disk is reported missing.
 for r in config.get('repos', []):
@@ -120,6 +189,10 @@ result = {
 }
 if missing_origins:
     result["missing_origins"] = missing_origins
+if cards_thread:
+    cards_thread.join(timeout=5)
+    if cards_box.get('v'):
+        result["sprint_cards"] = cards_box['v']
 
 json.dump(result, sys.stdout, ensure_ascii=False)
 PYEOF

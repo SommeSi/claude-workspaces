@@ -98,6 +98,10 @@ Add a `notion` section and `/workspace:start-worktree` (with no goal in your mes
 
 `{week}` is the ISO week number of today.
 
+**Client mails too (optional):** add `"mail": {"query": "to:devs@example.com -from:example.com newer_than:7d", "skill": "bug-from-mail"}`. The picker then also offers the latest client mail threads (Gmail connector); picking one runs that project skill to read the thread and create the card, and the workspace starts on it.
+
+**Faster with an integration token (optional):** store a Notion internal-integration token (connected to the board) in the macOS keychain — `security add-generic-password -U -s claude-workspaces-notion -a notion -w` (prompts, never paste it in a chat) — and the preflight fetches your sprint cards itself, in parallel, saving a whole LLM turn. "You" = the Notion member whose email is `notion_user_email` in `~/.claude-workspaces/config.json` (per user, never in a repo), else your git `user.email`. Without a token, the skill uses the Notion MCP.
+
 With `history_data_source`, `/workspace:finish` adds one row per merged delivery to that Notion database: attention hours, Claude working hours and calendar days, measured from the transcripts by `scripts/ws-actuals.py` (no double counting across parallel sessions). The `estimation` plugin's `devis` skill reads it to calibrate quotes.
 
 ### Terminal layout (optional, WezTerm)
@@ -159,6 +163,15 @@ What a session learns should reach the next sessions, including teammates'. Thre
 - **Rules in the repos.** Team lessons live in each repo's `.claude/rules/*.md`. Claude Code loads a rule file natively when the session reads or edits a file matching its `paths:` frontmatter (files without `paths:` load every session). They are shared through git and reviewed in PRs.
 - **Capture.** At the end of every session (≥ 3 user messages), the `SessionEnd` hook forks a detached `claude -p --safe-mode --model sonnet` that reads the transcript and writes the confirmed team lessons to `~/.claude-workspaces/knowledge-inbox/<session>.json`, plus a summary to `~/.claude-workspaces/sessions.jsonl` (used by `/workspace:recall`). The hook returns in ~50 ms; the work runs in the background (log: `~/.claude-workspaces/knowledge-capture.log`). Disable with `WS_KNOWLEDGE_DISABLE=1`.
 - **Landing.** `/git-pr` adds the inbox lessons matching the PR's files (`scripts/ws-knowledge.py match`); `/workspace:knowledge-review` turns the rest into one PR per repo. Nothing merges without a human.
+
+### Session reminders (automatic)
+
+At every session start, the `SessionStart` hook (`scripts/ws-session-nag.py`) lists, for the session's GitHub org/repos:
+- **PRs assigned to you** (as reviewer/merger) still open — merge them before opening new ones;
+- **your PRs without an assignee other than you** — every PR must be assigned to a reviewer, a required `pr-assignee` check blocks the merge otherwise;
+- **your pending post-deploy actions** — PRs declare manual steps in a `## Déploiement` section (`### Avant` / `### Après`; code actions are migration-jobs that run by themselves); the repos' GitHub Action turns it into a `post-deploy` issue (one box per action and environment) and a required `deploy-prerequisites` check blocks the prod deploy while an "Avant" box is unticked.
+
+It reads a cache refreshed in the background, so it adds no latency. `scripts/ws-reviewer.py` picks the least-loaded reviewer (open PRs assigned across the org; candidates = `reviewers` in the config, else recent PR authors) — `/git-pr` uses it to assign every new PR.
 
 Each workspace also gets `.claude/settings.local.json` with `autoMemoryDirectory` pointing at the project's memory, so personal auto-memory is no longer scattered (and lost) across worktree directories.
 

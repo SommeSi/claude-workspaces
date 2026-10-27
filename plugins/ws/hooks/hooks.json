@@ -69,6 +69,18 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-session-nag.py\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
