@@ -202,6 +202,10 @@ On each new review or comment from someone else (reviewers, Codex threads) you g
 
 The session reminders list the PRs ready to merge, the fix agents running and the reviews not yet handed to an agent. Files: state `~/.claude-workspaces/review-watch.json`, watcher log `~/.claude-workspaces/review-watch.log`, one agent's log and result `~/.claude-workspaces/autofix/<repo>-<n>.log` / `.json`. Tests: `python3 -m unittest scripts/test_ws_review_watch.py`.
 
+### Oversized PRs → stack (automatic in `/git-pr`)
+
+`/git-pr` measures the branch the way the repo's `pr-size-limit` check does (`scripts/ws-stack.py size`: `MAX_FILES`, `MAX_LINES`, `EXCLUDE_REGEX` read from `.github/workflows/pr-size-limit.yml`). Over the limit, the recap proposes layers (migrations and models → services and jobs → API → front, each with its tests); once validated, `ws-stack.py split <plan> --submit` builds one branch per layer (`<branch>-1-models`…) with git plumbing — never touching your worktree, index or branch — then opens them as a linked GitHub Stack with the official [`gh stack`](https://github.com/github/gh-stack) extension (`init` + `submit --auto --open`, from a throwaway worktree), and sets each PR's title, body and assignee. `ws-update.sh` installs the extension when `gh` is present. Merge with `gh stack merge <top PR> --yes --merge`, then check `git merge-base --is-ancestor <top sha> origin/develop`. Tests: `python3 -m unittest scripts/test_ws_stack.py`.
+
 ## Requirements
 
 - Claude Code

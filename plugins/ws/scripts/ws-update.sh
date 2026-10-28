@@ -110,6 +110,19 @@ fi
 # 6. Cleanup
 rm -rf "$TMP_DIR"
 
+# 7. gh stack extension (/git-pr splits oversized PRs into a stack with it). Never fails the update.
+if command -v gh >/dev/null 2>&1; then
+  GH_EXTS=$(gh extension list 2>/dev/null || true)
+  case "$GH_EXTS" in
+    *gh-stack*) echo "  ✓ gh stack present" ;;
+    *) if gh extension install github/gh-stack >/dev/null 2>&1; then
+         echo "  ✓ gh stack installed"
+       else
+         echo "  ⚠ gh stack not installed: run 'gh extension install github/gh-stack'"
+       fi ;;
+  esac
+fi
+
 echo ""
 echo "Installed:"
 ls -d "$CACHE_DIR"/*/* 2>/dev/null | while read dir; do
