@@ -102,6 +102,8 @@ Add a `notion` section and `/workspace:start-worktree` (with no goal in your mes
 
 **Faster with an integration token (optional):** store a Notion internal-integration token (connected to the board) in the macOS keychain — `security add-generic-password -U -s claude-workspaces-notion -a notion -w` (prompts, never paste it in a chat) — and the preflight fetches your sprint cards itself, in parallel, saving a whole LLM turn. "You" = the Notion member whose email is `notion_user_email` in `~/.claude-workspaces/config.json` (per user, never in a repo), else your git `user.email`. Without a token, the skill uses the Notion MCP.
 
+**PRs without a card:** `/git-pr` checks that the PR is tied to a card (`TASK-<n>` in the branch, or a Notion `Spec`). If not, it lists your open cards across all sprints (`scripts/ws_notion.py cards --all-sprints`) to catch a forgotten one, else proposes a new card in the recap and creates it with the PR (`ws_notion.py create`, existing Feature/Client values only).
+
 With `history_data_source`, `/workspace:finish` adds one row per merged delivery to that Notion database: attention hours, Claude working hours and calendar days, measured from the transcripts by `scripts/ws-actuals.py` (no double counting across parallel sessions). The `estimation` plugin's `devis` skill reads it to calibrate quotes.
 
 ### Terminal layout (optional, WezTerm)
