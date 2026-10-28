@@ -67,10 +67,10 @@ Run this **only when** `config.notion` is set **and** the user's message has no 
    ```
 3. Drop rows whose `<config.notion.status_property>` is in `config.notion.exclude_status`. Sort by priority (Critical → Low).
 4. **No cards / Notion error** → say so in one line and fall back to the normal derivation (ask for the goal only if the message has none).
-   **Client mails** (only if `config.mail` is set): in the **same message** as the Notion MCP call above — or as your very first tool call when the cards came from the preflight — call `mcp__claude_ai_Gmail__search_threads` `{"query": "<config.mail.query>", "pageSize": 10}`. Keep threads whose last message is from outside the company and that don't already read as fixed ("corrigé", "c'est bon", "résolu" from us). Gmail unavailable → skip mails silently.
+   **Client mails** (only if `config.mail` is set): **if the preflight output has `mails.threads`, use them and make no Gmail call** (a cache warmed in the background at session start; `mails.age_min` = its age, say it only if > 30). `mails.refreshing` (cache not built yet) or no `mails` key → in the **same message** as the Notion MCP call above — or as your very first tool call when the cards came from the preflight — call `mcp__claude_ai_Gmail__search_threads` `{"query": "<config.mail.query>", "pageSize": 10}`. Keep threads whose last message is from outside the company and that don't already read as fixed ("corrigé", "c'est bon", "résolu" from us). Gmail unavailable → skip mails silently.
 5. Otherwise, immediately `AskUserQuestion` (single-select, max 4 options; "Other" covers free text). Mix both sources: up to 2 most recent client mails first, then the top cards by priority to fill 4.
    - card → label `🗂 <title ≤ 5 words>`, description: `<Type> · <Feature> · <Priority> · <Statut>`;
-   - mail → label `📧 <subject ≤ 5 words>`, description: `<client domain> · <date> · <last sender name>`.
+   - mail → label `📧 <subject ≤ 5 words>`, description: `<client domain> · <date> · <last sender name>` (from the cache: `domain`, `date`, local part of `sender`).
    **A mail is picked** → invoke the project skill named in `config.mail.skill` (e.g. `bug-from-mail`) on that thread, starting at its thread-reading step: it reads the thread, splits it into bugs, dedupes against Notion and creates the card(s). Then use the created (or existing) card exactly like a picked card in step 6.
 6. From the chosen card:
    - **Goal** = title + `Description générale` (if any)

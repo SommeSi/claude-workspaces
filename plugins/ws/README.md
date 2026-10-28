@@ -99,7 +99,7 @@ Add a `notion` section and `/workspace:start-worktree` (with no goal in your mes
 
 `{week}` is the ISO week number of today.
 
-**Client mails too (optional):** add `"mail": {"query": "to:devs@example.com -from:example.com newer_than:7d", "skill": "bug-from-mail"}`. The picker then also offers the latest client mail threads (Gmail connector); picking one runs that project skill to read the thread and create the card, and the workspace starts on it.
+**Client mails too (optional):** add `"mail": {"query": "to:devs@example.com -from:example.com newer_than:7d", "skill": "bug-from-mail"}`. The picker then also offers the latest client mail threads (Gmail connector); picking one runs that project skill to read the thread and create the card, and the workspace starts on it. No Gmail wait: at session start a detached headless Haiku (`scripts/ws_mail_cache.py`, ~7 s, at most every 15 min) makes the search through the connector and caches the threads; the preflight reads that cache.
 
 **Faster with an integration token (optional):** store a Notion internal-integration token (connected to the board) in the macOS keychain — `security add-generic-password -U -s claude-workspaces-notion -a notion -w` (prompts, never paste it in a chat) — and the preflight fetches your sprint cards itself, in parallel, saving a whole LLM turn. "You" = the Notion member whose email is `notion_user_email` in `~/.claude-workspaces/config.json` (per user, never in a repo), else your git `user.email`. Without a token, the skill uses the Notion MCP.
 

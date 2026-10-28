@@ -9,6 +9,8 @@
 4. With the review watcher on (ws-review-watch.py): their PRs approved and green, ready to
    merge (`review_merge: "ask"`), the fix agents running, and reviews received that the
    watcher could not hand to an agent yet.
+Also warms the client-mail cache of start-worktree's picker (ws_mail_cache.py, detached).
+
 5. Client promises made by mail (ws-mail-promises.py, written by the `mail` skill) due
    today or overdue: the client should not have to chase us.
 
@@ -141,6 +143,9 @@ def main():
         event = json.load(sys.stdin)
     except ValueError:
         return
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import ws_mail_cache
+    ws_mail_cache.warm(event.get("cwd") or os.getcwd())
     repos = slugs(event.get("cwd") or os.getcwd())
     watch_blocks = review_blocks()
     mail = mail_blocks()

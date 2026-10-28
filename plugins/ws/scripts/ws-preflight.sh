@@ -62,6 +62,7 @@ if os.path.isfile(local_path):
 import threading
 sys.path.insert(0, script_dir)
 from ws_notion import cards as notion_cards
+from ws_mail_cache import cached as mail_cached
 
 cards_box = {}
 def _fetch():
@@ -137,6 +138,10 @@ result = {
 }
 if missing_origins:
     result["missing_origins"] = missing_origins
+# Client mails from the local cache (warmed in the background at session start): no Gmail turn.
+mails = mail_cached(project_root) if config.get('mail') else None
+if mails:
+    result["mails"] = mails
 if cards_thread:
     cards_thread.join(timeout=5)
     if cards_box.get('v'):
