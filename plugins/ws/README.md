@@ -22,6 +22,7 @@ Each workspace gets:
 | `/workspace:finish` | Finalize workspace — safety checks, cleanup |
 | `/workspace:knowledge-review` | Turn captured session lessons into one `.claude/rules/` PR per repo |
 | `/workspace:recall` | Find a past session from a few words, with its resume command |
+| `/workspace:mail` | Client mail that doesn't read as AI: facts checked first, right tu/vous, 3 tone versions to pick from, Gmail draft in the thread, promises tracked |
 
 ## Setup
 
@@ -171,7 +172,8 @@ What a session learns should reach the next sessions, including teammates'. Thre
 At every session start, the `SessionStart` hook (`scripts/ws-session-nag.py`) lists, for the session's GitHub org/repos:
 - **PRs assigned to you** (as reviewer/merger) still open — merge them before opening new ones;
 - **your PRs without an assignee other than you** — every PR must be assigned to a reviewer (the repos' `pr-assignee` check turns red otherwise, as a signal, never blocking);
-- **your pending post-deploy actions** — PRs declare manual steps in a `## Déploiement` section (`### Avant` / `### Après`; code actions are migration-jobs that run by themselves); the repos' GitHub Action turns it into a `post-deploy` issue (one box per action and environment) and the `deploy-prerequisites` check turns red on the deploy PR while an "Avant" box is unticked (a signal, never blocking).
+- **your pending post-deploy actions** — PRs declare manual steps in a `## Déploiement` section (`### Avant` / `### Après`; code actions are migration-jobs that run by themselves); the repos' GitHub Action turns it into a `post-deploy` issue (one box per action and environment) and the `deploy-prerequisites` check turns red on the deploy PR while an "Avant" box is unticked (a signal, never blocking);
+- **client promises made by mail and due today** — the `mail` skill records each commitment of a draft ("je reviens vers vous jeudi", an evolution) in `~/.claude-workspaces/mail-promises.jsonl` (`scripts/ws-mail-promises.py`); a later reply in the same thread settles them.
 
 It reads a cache refreshed in the background, so it adds no latency. `scripts/ws-reviewer.py` picks the least-loaded reviewer (open PRs assigned across the org; candidates = `reviewers` in the config, else recent PR authors) — `/git-pr` uses it to assign every new PR.
 

@@ -9,13 +9,15 @@
 4. With the review watcher on (ws-review-watch.py): their PRs approved and green, ready to
    merge (`review_merge: "ask"`), the fix agents running, and reviews received that the
    watcher could not hand to an agent yet.
+5. Client promises made by mail (ws-mail-promises.py, written by the `mail` skill) due
+   today or overdue: the client should not have to chase us.
 
 Zero latency: it reads a cache (~/.claude-workspaces/cache/session-nag.json) and, when
 it is older than 10 min, refreshes it in a detached process for the next session; the
 watcher's files are read as they are.
 Event JSON on stdin; prints the hook JSON on stdout.
 """
-import json, os, re, subprocess, sys, time
+import datetime, importlib.util, json, os, re, subprocess, sys, time
 
 CACHE = os.path.expanduser("~/.claude-workspaces/cache/session-nag.json")
 WATCH = os.path.expanduser("~/.claude-workspaces/review-watch.json")
@@ -120,6 +122,20 @@ def review_blocks():
     return blocks
 
 
+def mail_blocks():
+    spec = importlib.util.spec_from_file_location(
+        "mail_promises", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ws-mail-promises.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    today = datetime.date.today().isoformat()
+    due = [p for p in m.open_promises() if p["due"] <= today]
+    if not due:
+        return []
+    late = lambda p: " (en retard)" if p["due"] < today else ""
+    return [f"📬 {len(due)} promesse(s) faite(s) à des clients par mail, à tenir aujourd'hui :"] + [
+        f"  {p['due']}{late(p)} {p['who']} : {p['promise'][:80]} ({p['subject'][:50]})" for p in due[:6]]
+
+
 def main():
     try:
         event = json.load(sys.stdin)
@@ -127,7 +143,8 @@ def main():
         return
     repos = slugs(event.get("cwd") or os.getcwd())
     watch_blocks = review_blocks()
-    if not repos and not watch_blocks:
+    mail = mail_blocks()
+    if not repos and not watch_blocks and not mail:
         return
     cache = load()
     keys = repos + ["org:" + s.split("/")[0] for s in repos]
@@ -166,7 +183,7 @@ def main():
     if lines:
         blocks.append(f"⚠️ {len(lines)} action(s) post-déploiement en attente pour toi :")
         blocks += [f"  {l}" for l in lines[:6]]
-    blocks += watch_blocks
+    blocks += watch_blocks + mail
     if not blocks:
         return
     msg = "\n".join(blocks)
@@ -177,7 +194,8 @@ def main():
         "systemMessage": msg,
         "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": msg +
             "\nRappelle ces points en une ligne dans ta première réponse. Si l'utilisateur veut créer une PR alors qu'il a des PR"
-            " assignées à merger, rappelle-lui de les merger d'abord." + ready_hint},
+            " assignées à merger, rappelle-lui de les merger d'abord." + ready_hint +
+            ("\nPour une promesse client due, propose de préparer le mail de suivi avec le skill mail." if mail else "")},
     }, ensure_ascii=False))
 
 
