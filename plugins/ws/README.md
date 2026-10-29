@@ -23,6 +23,7 @@ Each workspace gets:
 | `/workspace:knowledge-review` | Turn captured session lessons into one `.claude/rules/` PR per repo, and list the recurring tooling frictions |
 | `/workspace:recall` | Find a past session from a few words, with its resume command |
 | `/workspace:mail` | Client mail that doesn't read as AI: facts checked first, right tu/vous, 3 tone versions to pick from, Gmail draft in the thread, promises tracked |
+| `/workspace:brain` | The team's knowledge graph (reviewed `.claude/rules/` lessons by domain, with their source PRs) as a shared claude.ai page |
 
 ## Setup
 

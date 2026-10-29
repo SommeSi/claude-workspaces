@@ -1,0 +1,240 @@
+<title>Cerveau SommeSi</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen explorer — header strip, graph canvas left, reading panel right (stacks under the graph on phones). */
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --fg: #18202c; --muted: #5d6878; --faint: #c9d0da; --line: #dde2e9;
+  --accent: #2c55c9; --accent-soft: #dfe7fb; --pr: #a8641a; --pr-soft: #f6e8d6; --lesson: #7b8798; --always: #6b4fbf;
+  --hit: #d23f6a;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f141c; --panel: #161d28; --fg: #e6ebf2; --muted: #9aa5b5; --faint: #3a4556; --line: #263041;
+  --accent: #86a6ff; --accent-soft: #1f2c4d; --pr: #f0b45a; --pr-soft: #3a2c17; --lesson: #6f7c8f; --always: #b49cff;
+  --hit: #ff7aa0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f141c; --panel: #161d28; --fg: #e6ebf2; --muted: #9aa5b5; --faint: #3a4556; --line: #263041;
+  --accent: #86a6ff; --accent-soft: #1f2c4d; --pr: #f0b45a; --pr-soft: #3a2c17; --lesson: #6f7c8f; --always: #b49cff;
+  --hit: #ff7aa0; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 14px; display: flex; flex-direction: column; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; padding-block: 14px 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line); }
+h1 { font-family: var(--display); font-weight: 800; font-size: 1.45rem; letter-spacing: -0.01em; margin: 0; }
+.stats { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; display: flex; gap: 14px; flex-wrap: wrap; }
+.stats b { color: var(--fg); font-weight: 500; }
+.tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+input[type="search"] { font: inherit; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; width: 220px; max-width: 100%; }
+input[type="search"]:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip { font: 500 12px var(--mono); background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--fg); border-color: var(--accent); }
+main { flex: 1; display: flex; min-height: 0; }
+#graph { flex: 1; min-width: 0; position: relative; }
+#graph svg { width: 100%; height: 100%; display: block; cursor: grab; }
+#graph svg:active { cursor: grabbing; }
+.legend { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: 12px; display: flex; gap: 12px; flex-wrap: wrap;
+  font: 11px var(--mono); color: var(--muted); background: color-mix(in srgb, var(--bg) 85%, transparent); padding: 6px 8px; border-radius: 6px; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+aside { width: 380px; max-width: 42%; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding-block: 18px 24px;
+  padding-left: 18px; padding-right: max(18px, env(safe-area-inset-right, 0px)); min-width: 0; }
+aside h2 { font-family: var(--display); font-weight: 600; font-size: 1.15rem; margin: 0 0 4px; text-wrap: balance; }
+.eyebrow { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+.meta { font: 12px var(--mono); color: var(--muted); margin: 6px 0 12px; display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.lesson-text { line-height: 1.55; max-width: 62ch; }
+.lesson-text code, .item code { font-family: var(--mono); font-size: 0.92em; background: var(--accent-soft); padding: 0 3px; border-radius: 3px; }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 14px; }
+.tag { font: 11px var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; color: var(--muted); }
+.list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 16px; }
+.item { text-align: left; font: inherit; color: var(--fg); background: none; border: 0; border-radius: 6px; padding: 7px 8px; cursor: pointer; line-height: 1.4; display: flex; gap: 8px; }
+.item:hover { background: var(--accent-soft); }
+.item .n { font: 12px var(--mono); color: var(--muted); min-width: 2.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.item .d { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
+.section-title { font: 600 12px var(--body); color: var(--muted); margin: 14px 0 2px; }
+a.pr { color: var(--pr); font-family: var(--mono); font-size: 12px; text-decoration: none; border-bottom: 1px dotted var(--pr); }
+.back { font: 12px var(--mono); color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; margin-bottom: 12px; }
+.empty { color: var(--muted); line-height: 1.5; }
+.months { display: flex; align-items: flex-end; gap: 3px; height: 46px; margin: 8px 0 18px; }
+.months div { flex: 1; background: var(--accent); opacity: 0.75; border-radius: 2px 2px 0 0; min-height: 2px; position: relative; }
+.months span { position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%); font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.node-label { font: 600 11px var(--body); fill: var(--fg); pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.faded { opacity: 0.12; }
+@media (max-width: 760px) {
+  main { flex-direction: column; }
+  #graph { min-height: 58vh; }
+  aside { width: auto; max-width: none; border-left: 0; border-top: 1px solid var(--line); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  input[type="search"] { width: 100%; }
+  .tools { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header>
+  <h1>Cerveau SommeSi</h1>
+  <div class="stats" id="stats">Chargement des règles…</div>
+  <div class="tools">
+    <input type="search" id="q" placeholder="Chercher une leçon (lettrage, Pennylane…)" aria-label="Chercher une leçon">
+    <button class="chip" id="r-back" aria-pressed="true">back</button>
+    <button class="chip" id="r-front" aria-pressed="true">front</button>
+  </div>
+</header>
+<main>
+  <div id="graph">
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i>domaine</span>
+      <span><i style="background:var(--always)"></i>toujours chargé</span>
+      <span><i style="background:var(--lesson)"></i>leçon</span>
+      <span><i style="background:var(--pr);border-radius:2px"></i>PR source</span>
+    </div>
+  </div>
+  <aside id="panel" aria-live="polite"></aside>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const norm = (s) => String(s ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const rich = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+const fmtDate = (d) => d ? new Date(d + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "";
+let DATA, byId, adj, sel = null, query = "", repos = new Set(["back", "front"]);
+
+fetch("brain.json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(init).catch((e) => {
+  $("#stats").textContent = "Impossible de lire les données du graphe (" + e.message + "). Relancez /workspace:brain pour les republier.";
+});
+
+function init(d) {
+  DATA = d;
+  byId = new Map(d.nodes.map((n) => [n.id, n]));
+  adj = new Map(d.nodes.map((n) => [n.id, new Set()]));
+  d.edges.forEach((e) => { adj.get(e.source).add(e.target); adj.get(e.target).add(e.source); });
+  d.nodes.filter((n) => n.type === "domain").forEach((n) => { n.count = lessonsOf(n.id).length; });
+  const s = d.stats;
+  $("#stats").innerHTML = `<span><b>${s.lessons}</b> leçons</span><span><b>${s.domains}</b> domaines</span><span><b>${s.prs}</b> PR sources</span><span>à jour le ${esc(d.generated_at)}</span>`;
+  try { const saved = JSON.parse(localStorage.getItem("brain-repos") || "null"); if (Array.isArray(saved) && saved.length) repos = new Set(saved); } catch (e) {}
+  ["back", "front"].forEach((r) => {
+    const b = $("#r-" + r); b.setAttribute("aria-pressed", repos.has(r));
+    b.onclick = () => { repos.has(r) && repos.size > 1 ? repos.delete(r) : repos.add(r); b.setAttribute("aria-pressed", repos.has(r));
+      try { localStorage.setItem("brain-repos", JSON.stringify([...repos])); } catch (e) {} paint(); panel(); };
+  });
+  $("#q").addEventListener("input", (e) => { query = norm(e.target.value.trim()); sel = null; paint(); panel(); });
+  draw(); panel();
+}
+
+function lessonsOf(id) {  // lessons under a domain (directly or through its sections) or linked to a PR
+  const out = [];
+  for (const x of adj.get(id)) {
+    const n = byId.get(x);
+    if (n.type === "lesson") out.push(n);
+    else if (n.type === "section" && byId.get(id).type === "domain") for (const y of adj.get(x)) if (byId.get(y).type === "lesson") out.push(byId.get(y));
+  }
+  return out;
+}
+const visible = (n) => n.type !== "lesson" || repos.has(n.repo);
+const matches = (n) => n.type === "lesson" && query && norm(n.text).includes(query);
+
+let gNodes, gLinks, gLabels;
+function draw() {
+  const el = $("#graph"), W = el.clientWidth || 800, H = el.clientHeight || 600;
+  const nodes = DATA.nodes.filter((n) => n.type !== "repo").map((n) => Object.assign(n, {}));
+  const ids = new Set(nodes.map((n) => n.id));
+  const links = DATA.edges.filter((e) => ids.has(e.source) && ids.has(e.target)).map((e) => ({ ...e }));
+  const r = (n) => n.type === "domain" ? 7 + Math.sqrt(n.count || 1) * 2.6 : n.type === "section" ? 4 : n.type === "pr" ? 3.5 : 3;
+  const sim = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id((n) => n.id).distance((l) => l.target.type === "pr" ? 34 : l.source.type === "domain" ? 38 : 22).strength(0.7))
+    .force("charge", d3.forceManyBody().strength((n) => n.type === "domain" ? -260 : n.type === "section" ? -60 : -22))
+    .force("collide", d3.forceCollide((n) => r(n) + 2))
+    .force("x", d3.forceX(W / 2).strength(0.04)).force("y", d3.forceY(H / 2).strength(0.05))
+    .stop();
+  for (let i = 0; i < 320; i++) sim.tick();  // settle before the first frame: the graph is complete at rest
+
+  const svg = d3.select(el).append("svg").attr("viewBox", [0, 0, W, H]).attr("role", "img").attr("aria-label", "Graphe des règles d'équipe");
+  const root = svg.append("g");
+  svg.call(d3.zoom().scaleExtent([0.3, 5]).on("zoom", (e) => root.attr("transform", e.transform)));
+  svg.on("click", (e) => { if (e.target.tagName === "svg") { sel = null; paint(); panel(); } });
+  gLinks = root.append("g").attr("stroke", "var(--faint)").attr("stroke-width", 0.8).selectAll("line").data(links).join("line");
+  gNodes = root.append("g").selectAll("path").data(nodes).join("path")
+    .attr("d", (n) => d3.symbol(n.type === "pr" ? d3.symbolSquare : d3.symbolCircle, Math.PI * r(n) ** 2)())
+    .attr("fill", (n) => n.type === "domain" ? (n.always ? "var(--always)" : "var(--accent)") : n.type === "section" ? "var(--panel)" : n.type === "pr" ? "var(--pr)" : "var(--lesson)")
+    .attr("stroke", (n) => n.type === "section" ? "var(--accent)" : "var(--bg)").attr("stroke-width", (n) => n.type === "section" ? 1.4 : 1)
+    .style("cursor", "pointer")
+    .on("click", (e, n) => { e.stopPropagation(); select(n.id); });
+  gNodes.append("title").text((n) => n.type === "lesson" ? n.label + "…" : n.label);
+  gNodes.call(d3.drag()
+    .on("start", (e) => { if (!e.active) sim.alphaTarget(0.2).restart(); e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; })
+    .on("drag", (e) => { e.subject.fx = e.x; e.subject.fy = e.y; })
+    .on("end", (e) => { if (!e.active) sim.alphaTarget(0); e.subject.fx = null; e.subject.fy = null; }));
+  gLabels = root.append("g").selectAll("text").data(nodes.filter((n) => n.type === "domain")).join("text")
+    .attr("class", "node-label").attr("text-anchor", "middle").text((n) => n.label);
+  const place = () => {
+    gLinks.attr("x1", (l) => l.source.x).attr("y1", (l) => l.source.y).attr("x2", (l) => l.target.x).attr("y2", (l) => l.target.y);
+    gNodes.attr("transform", (n) => `translate(${n.x},${n.y})`);
+    gLabels.attr("x", (n) => n.x).attr("y", (n) => n.y - r(n) - 5);
+  };
+  sim.on("tick", place); place(); paint();
+}
+
+function paint() {
+  if (!gNodes) return;
+  const focus = sel ? new Set([sel, ...adj.get(sel), ...[...adj.get(sel)].flatMap((x) => byId.get(sel).type === "domain" ? [...adj.get(x)] : [])]) : null;
+  gNodes.attr("display", (n) => visible(n) ? null : "none")
+    .classed("faded", (n) => (query && n.type === "lesson" && !matches(n)) || (focus && !focus.has(n.id)))
+    .attr("fill", (n) => matches(n) || n.id === sel && n.type === "lesson" ? "var(--hit)" : n.type === "domain" ? (n.always ? "var(--always)" : "var(--accent)") : n.type === "section" ? "var(--panel)" : n.type === "pr" ? "var(--pr)" : "var(--lesson)");
+  gLinks.attr("display", (l) => visible(l.source) && visible(l.target) ? null : "none")
+    .classed("faded", (l) => (focus && !(focus.has(l.source.id) && focus.has(l.target.id))) || (query && !(matches(l.source) || matches(l.target))));
+  gLabels.classed("faded", (n) => focus && !focus.has(n.id));
+}
+
+function select(id) { sel = id; paint(); panel(); $("#panel").scrollTop = 0; }
+
+function lessonItem(n) {
+  return `<button class="item" data-id="${esc(n.id)}"><span>${rich(n.text.length > 150 ? n.text.slice(0, 150) + "…" : n.text)}</span><span class="d">${esc(n.repo)}</span></button>`;
+}
+
+function panel() {
+  const p = $("#panel");
+  if (!DATA) return;
+  const n = sel && byId.get(sel);
+  const back = `<button class="back" data-back>← Tous les domaines</button>`;
+  if (n && n.type === "lesson") {
+    const prs = [...adj.get(n.id)].map((x) => byId.get(x)).filter((x) => x.type === "pr");
+    p.innerHTML = back + `<div class="eyebrow">Leçon · ${esc(byId.get("domain:" + n.domain)?.label || n.domain)}${n.section ? " · " + esc(n.section) : ""}</div>
+      <p class="lesson-text">${rich(n.text)}</p>
+      <div class="meta"><span>${esc(n.file)}</span>${n.date ? `<span>apprise le ${fmtDate(n.date)}</span>` : ""}</div>
+      ${prs.length ? `<div class="section-title">Sources</div><div class="tags">${prs.map((x) => x.url ? `<a class="pr" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>` : `<span class="tag">${esc(x.label)}</span>`).join(" ")}</div>` : ""}
+      <button class="chip" data-id="domain:${esc(n.domain)}">Voir le domaine</button>`;
+  } else if (n && (n.type === "domain" || n.type === "section")) {
+    const dom = n.type === "domain" ? n : byId.get("domain:" + n.domain);
+    const ls = (n.type === "domain" ? lessonsOf(n.id) : [...adj.get(n.id)].map((x) => byId.get(x)).filter((x) => x.type === "lesson")).filter(visible);
+    const groups = d3.group(ls, (l) => l.section || "");
+    p.innerHTML = back + `<div class="eyebrow">${dom.always ? "Toujours chargé" : "Domaine"} · ${esc(dom.repos.join(" + "))}</div><h2>${esc(n.label)}</h2>
+      <div class="meta"><span>${ls.length} leçon${ls.length > 1 ? "s" : ""}</span>${dom.files.map((f) => `<span>${esc(f)}</span>`).join("")}</div>
+      ${dom.keywords.length ? `<div class="section-title">Se charge quand le message contient</div><div class="tags">${dom.keywords.map((k) => `<span class="tag">${esc(k)}</span>`).join("")}</div>` : ""}
+      ${dom.always ? `<p class="empty">Chargé dans toutes les sessions de ces repos.</p>` : dom.paths.length ? `<div class="section-title">…ou quand Claude ouvre</div><div class="tags">${dom.paths.slice(0, 12).map((k) => `<span class="tag">${esc(k)}</span>`).join("")}</div>` : ""}
+      ${[...groups].map(([sec, items]) => `${sec ? `<div class="section-title">${esc(sec)}</div>` : ""}<div class="list">${items.map(lessonItem).join("")}</div>`).join("")}`;
+  } else if (n && n.type === "pr") {
+    const ls = lessonsOf(n.id).filter(visible);
+    p.innerHTML = back + `<div class="eyebrow">PR source</div><h2>${esc(n.label)}</h2>
+      ${n.url ? `<p><a class="pr" href="${esc(n.url)}" target="_blank" rel="noopener">Ouvrir sur GitHub</a></p>` : ""}
+      <div class="section-title">${ls.length} leçon${ls.length > 1 ? "s" : ""} tirée${ls.length > 1 ? "s" : ""} de cette PR</div><div class="list">${ls.map(lessonItem).join("")}</div>`;
+  } else if (query) {
+    const ls = DATA.nodes.filter((x) => matches(x) && visible(x));
+    p.innerHTML = `<div class="eyebrow">Recherche</div><h2>${ls.length} leçon${ls.length > 1 ? "s" : ""}</h2><div class="list">${ls.map(lessonItem).join("") || `<p class="empty">Aucune leçon ne contient ce mot.</p>`}</div>`;
+  } else {
+    const doms = DATA.nodes.filter((x) => x.type === "domain").map((x) => ({ x, c: lessonsOf(x.id).filter(visible).length })).filter((o) => o.c).sort((a, b) => b.c - a.c);
+    const months = Object.entries(DATA.stats.by_month).slice(-12), max = Math.max(1, ...months.map((m) => m[1]));
+    p.innerHTML = `<div class="eyebrow">Ce que l'équipe a appris</div><h2>Les règles relues et mergées, une leçon par point</h2>
+      <p class="empty">Claude les charge tout seul : selon les fichiers qu'il ouvre, ou les mots du message. Cliquez sur un domaine, une leçon ou une PR.</p>
+      <div class="section-title">Leçons par mois</div>
+      <div class="months" aria-label="Leçons apprises par mois">${months.map(([m, c]) => `<div style="height:${Math.round((c / max) * 100)}%" title="${esc(m)} : ${c}"><span>${esc(m.slice(2))}</span></div>`).join("")}</div>
+      <div class="section-title">Domaines</div>
+      <div class="list">${doms.map((o) => `<button class="item" data-id="${esc(o.x.id)}"><span class="n">${o.c}</span><span>${esc(o.x.label)}${o.x.always ? ' <span class="tag">toujours</span>' : ""}</span></button>`).join("")}</div>`;
+  }
+  p.querySelectorAll("[data-id]").forEach((b) => b.onclick = () => select(b.dataset.id));
+  p.querySelectorAll("[data-back]").forEach((b) => b.onclick = () => { sel = null; paint(); panel(); });
+}
+</script>
