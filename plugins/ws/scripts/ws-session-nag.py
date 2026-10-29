@@ -14,17 +14,21 @@ Also warms the client-mail cache of start-worktree's picker (ws_mail_cache.py, d
 5. Client promises made by mail (ws-mail-promises.py, written by the `mail` skill) due
    today or overdue: the client should not have to chase us.
 
-Zero latency: it reads a cache (~/.claude-workspaces/cache/session-nag.json) and, when
-it is older than 10 min, refreshes it in a detached process for the next session; the
-watcher's files are read as they are.
+The PR lists are fetched again before being shown when the cache is older than 2 min
+(three parallel gh calls, ~1.5 s, capped at 2.5 s; on timeout the cached lists are shown with
+their age), so a PR merged a minute ago no longer shows. Post-deploy issues come from a cache
+(~/.claude-workspaces/cache/session-nag.json) refreshed in a detached process when older than
+10 min; the watcher's files are read as they are.
 Event JSON on stdin; prints the hook JSON on stdout.
 """
-import datetime, importlib.util, json, os, re, subprocess, sys, time
+import datetime, importlib.util, json, os, re, subprocess, sys, threading, time
 
 CACHE = os.path.expanduser("~/.claude-workspaces/cache/session-nag.json")
 WATCH = os.path.expanduser("~/.claude-workspaces/review-watch.json")
 AUTOFIX = os.path.expanduser("~/.claude-workspaces/autofix")
 TTL = 600
+FRESH = 120
+FIELDS = "number,title,url,author,assignees,repository,isDraft"
 
 
 def git(path, *args):
@@ -52,28 +56,50 @@ def load():
 
 
 def gh_json(*args):
-    r = subprocess.run(["gh", *args], capture_output=True, text=True)
+    try:
+        r = subprocess.run(["gh", *args], capture_output=True, text=True)
+    except OSError:  # gh not installed: nothing to show, never a traceback in the session
+        return None
     return json.loads(r.stdout or "null") if r.returncode == 0 else None
+
+
+def fetch_orgs(owners, timeout=None):
+    """{"org:<owner>": {...}} from parallel gh calls; owners whose calls failed or timed out are left out."""
+    got = {}
+
+    def run(key, *args):
+        got[key] = gh_json(*args)
+
+    threads = [threading.Thread(target=run, args=("me", "api", "user"), daemon=True)] + [
+        threading.Thread(target=run, args=((o, w), "search", "prs", "--owner", o, f"--{w}", "@me", "--state", "open",
+                                           "--json", FIELDS), daemon=True)
+        for o in owners for w in ("author", "assignee")]
+    deadline = time.time() + (timeout or 600)
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(max(0, deadline - time.time()))
+    me = (got.get("me") or {}).get("login")
+    return {"org:" + o: {"at": time.time(), "me": me, "mine": got[(o, "author")], "assigned": got[(o, "assignee")]}
+            for o in owners if me and got.get((o, "author")) is not None and got.get((o, "assignee")) is not None}
+
+
+def save(cache):
+    os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+    tmp = CACHE + f".tmp{os.getpid()}"
+    json.dump(cache, open(tmp, "w"))
+    os.replace(tmp, CACHE)
 
 
 def refresh(repos):
     cache = load()
-    me = (gh_json("api", "user") or {}).get("login")
-    for owner in sorted({s.split("/")[0] for s in repos}):
-        fields = "number,title,url,author,assignees,repository,isDraft"
-        mine = gh_json("search", "prs", "--owner", owner, "--author", "@me", "--state", "open", "--json", fields)
-        assigned = gh_json("search", "prs", "--owner", owner, "--assignee", "@me", "--state", "open", "--json", fields)
-        if mine is not None and assigned is not None and me:
-            cache["org:" + owner] = {"at": time.time(), "me": me, "mine": mine, "assigned": assigned}
+    cache.update(fetch_orgs(sorted({s.split("/")[0] for s in repos})))
     for slug in repos:
         r = subprocess.run(["gh", "issue", "list", "-R", slug, "--label", "post-deploy", "--assignee", "@me",
                             "--state", "open", "--json", "number,title,url,body"], capture_output=True, text=True)
         if r.returncode == 0:
             cache[slug] = {"at": time.time(), "issues": json.loads(r.stdout or "[]")}
-    os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-    tmp = CACHE + ".tmp"
-    json.dump(cache, open(tmp, "w"))
-    os.replace(tmp, CACHE)
+    save(cache)
 
 
 def pending_envs(body):
@@ -152,7 +178,13 @@ def main():
     if not repos and not watch_blocks and not mail:
         return
     cache = load()
-    keys = repos + ["org:" + s.split("/")[0] for s in repos]
+    owners = sorted({s.split("/")[0] for s in repos})
+    if owners and any(time.time() - cache.get("org:" + o, {}).get("at", 0) > FRESH for o in owners):
+        got = fetch_orgs(owners, timeout=2.5)  # what the user sees must be current: they act on it right away
+        if got:
+            cache.update(got)
+            save(cache)
+    keys = repos + ["org:" + o for o in owners]
     if repos and any(time.time() - cache.get(k, {}).get("at", 0) > TTL for k in keys) and os.fork() == 0:
         os.setsid()
         devnull = os.open(os.devnull, os.O_RDWR)
@@ -179,8 +211,10 @@ def main():
                 title = re.sub(r"^Déploiement : ", "", i["title"])
                 lines.append(f"#{i['number']} {title} ({' + '.join(envs)}) {i['url']}")
     blocks = []
+    age = max((time.time() - cache.get("org:" + o, {}).get("at", time.time()) for o in owners), default=0)
+    stale = f" (état d'il y a {int(age // 3600)} h)" if age >= 3600 else f" (état d'il y a {int(age // 60)} min)" if age > FRESH else ""
     if review:
-        blocks.append(f"🔀 {len(review)} PR assignée(s) à toi à relire et merger, avant d'en ouvrir une nouvelle :")
+        blocks.append(f"🔀 {len(review)} PR assignée(s) à toi à relire et merger, avant d'en ouvrir une nouvelle{stale} :")
         blocks += [f"  {l}" for l in review[:6]]
     if unassigned:
         blocks.append(f"🙋 {len(unassigned)} de tes PR sans relecteur assigné : assigne-les avant de merger :")
