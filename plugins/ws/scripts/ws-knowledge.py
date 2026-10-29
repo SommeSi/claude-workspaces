@@ -4,12 +4,14 @@
   capture            SessionEnd hook (event JSON on stdin). Forks a detached
                      worker and returns at once (the hook budget is ~1.5s); the
                      worker asks a headless `claude -p --safe-mode` to extract
-                     team lessons + a summary from the transcript, then writes
-                     ~/.claude-workspaces/knowledge-inbox/<session>.json and
-                     appends the summary to ~/.claude-workspaces/sessions.jsonl.
+                     team lessons, tooling frictions + a summary from the
+                     transcript, then writes ~/.claude-workspaces/knowledge-inbox/
+                     and friction-inbox/<session>.json, and appends the summary
+                     to ~/.claude-workspaces/sessions.jsonl.
   list [--repo R]    Pending lessons as JSON (for /knowledge-review).
   match --repo R F…  Pending lessons of repo R whose paths match files F (for /git-pr).
-  consume ID…        Drop lessons that were written into a rules file.
+  frictions          Pending tooling frictions grouped by target, most sessions first.
+  consume ID…        Drop lessons written into a rules file, or frictions fixed.
   recall WORDS…      Past sessions whose summary/branch/cwd match WORDS.
 
 Repos are identified by their origin slug (Owner/name), stable across worktrees.
@@ -21,9 +23,10 @@ from datetime import datetime
 HOME = os.path.expanduser("~")
 BASE = os.path.join(HOME, ".claude-workspaces")
 INBOX = os.path.join(BASE, "knowledge-inbox")
+FRICTIONS = os.path.join(BASE, "friction-inbox")
 SESSIONS = os.path.join(BASE, "sessions.jsonl")
 LOG = os.path.join(BASE, "knowledge-capture.log")
-MIN_USER_TURNS = 3
+MIN_USER_TURNS = 3  # a shorter session is still read when a tool failed (often a friction, ~6/week)
 MAX_CHARS = 120_000
 
 PROMPT = """You read the transcript of a Claude Code session of a software team and extract the durable knowledge that OTHER developers' Claude sessions should have.
@@ -35,13 +38,17 @@ Keep only lessons that are TEAM knowledge AND were confirmed in the session (by 
 - corrections the user made to Claude that reveal a team rule.
 Exclude: personal interaction preferences, one-off task state, anything obvious from reading the code, and any secret, credential, token, connection string or personal data (emails, phones) — refer to such things by name only.
 
+Separately, list the FRICTIONS: moments where the developer's tooling got in the way, so the tooling can be improved. Tooling = the workspace plugin (its /workspace:* skills, scripts, hooks), worktree and dev-server setup, ports, local databases, permission prompts and classifier refusals, CLI tools, Claude Code config. Signals: the user repeats or rephrases a request, complains, corrects how a tool was used, does a step by hand, or a TOOL ERROR costs several turns or needs a workaround.
+Exclude: bugs of the product being developed, the user changing their mind, one-off reasoning mistakes of Claude, and an error fixed at once by a retry.
+
 Repos involved (use the exact slug):
 {repos}
 
 Answer with ONE JSON object and nothing else:
 {{"summary": "2-3 sentences in French: what was done and the outcome",
-  "lessons": [{{"repo": "<slug from the list>", "topic": "short-kebab-key", "paths": ["repo-relative globs where it matters, [] if general"], "lesson": "English, imperative, 1-3 lines, concrete (name the method/file/field), why in a few words", "source": "PR #, ticket, client or date if mentioned"}}]}}
-At most 8 lessons; an empty list is the normal answer for most sessions.
+  "lessons": [{{"repo": "<slug from the list>", "topic": "short-kebab-key", "paths": ["repo-relative globs where it matters, [] if general"], "lesson": "English, imperative, 1-3 lines, concrete (name the method/file/field), why in a few words", "source": "PR #, ticket, client or date if mentioned"}}],
+  "frictions": [{{"target": "the thing to change: `workspace:<skill>`, a script or command name (`bin/prod-runner`, `ws-knowledge.py`), else exactly one of permissions, hooks (git hooks included), ports, database, dev-servers, git, ci, claude-config, other", "symptom": "French, 1 line, concrete: what got in the way and what it cost", "suggestion": "French, 1 line: the change to the tooling that would remove it", "evidence": "short quote of the user or of the error"}}]}}
+At most 8 lessons and 5 frictions; empty lists are the normal answer for most sessions.
 
 TRANSCRIPT:
 """
@@ -76,8 +83,8 @@ def repos_for(cwd):
 
 
 def condense(transcript):
-    """User + assistant text only (no tool output, no thinking, no subagents)."""
-    parts, user_turns, title, sdk = [], 0, "", False
+    """User + assistant text and failed tool calls (no other tool output, no thinking, no subagents)."""
+    parts, user_turns, title, sdk, calls, errors = [], 0, "", False, {}, 0
     for line in open(transcript, errors="ignore"):
         try:
             d = json.loads(line)
@@ -90,6 +97,19 @@ def condense(transcript):
         if str(d.get("entrypoint", "")).startswith("sdk"):
             sdk = True
         content = d.get("message", {}).get("content")
+        for b in content if isinstance(content, list) else []:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_use":
+                i = b.get("input") or {}
+                arg = i.get("description") or i.get("command") or i.get("file_path") or i.get("skill") or ""
+                calls[b.get("id")] = f"{b.get('name')} {str(arg)[:150]}".strip()
+            elif b.get("type") == "tool_result" and b.get("is_error"):
+                out = b.get("content")
+                out = out if isinstance(out, str) else " ".join(
+                    x.get("text", "") for x in out or [] if isinstance(x, dict))
+                errors += 1
+                parts.append(f"TOOL ERROR ({calls.get(b.get('tool_use_id'), '?')}): {out[:300]}")
         texts = [content] if isinstance(content, str) else [
             b.get("text", "") for b in content or [] if isinstance(b, dict) and b.get("type") == "text"]
         text = "\n".join(t for t in texts if t and not t.lstrip().startswith("<")).strip()
@@ -101,7 +121,7 @@ def condense(transcript):
     body = "\n\n".join(parts)
     if len(body) > MAX_CHARS:  # keep the start (the goal) and the end (the outcome)
         body = body[:20_000] + "\n\n[…]\n\n" + body[-(MAX_CHARS - 20_000):]
-    return body, user_turns, title, sdk
+    return body, user_turns, title, sdk, errors
 
 
 def claude_bin():
@@ -116,8 +136,8 @@ def extract(event):
     time.sleep(3)  # the transcript is written asynchronously
     if not (transcript and os.path.exists(transcript) and sid):
         return log(f"skip {sid[:8]}: no transcript")
-    body, user_turns, title, sdk = condense(transcript)
-    if sdk or user_turns < MIN_USER_TURNS:
+    body, user_turns, title, sdk, errors = condense(transcript)
+    if sdk or (user_turns < MIN_USER_TURNS and not errors):
         return log(f"skip {sid[:8]}: {'headless' if sdk else f'{user_turns} user turns'}")
     repos = repos_for(cwd)
     exe = claude_bin()
@@ -142,18 +162,27 @@ def extract(event):
         if l.get("lesson"):
             repo = slugs.get(l.get("repo"), {})
             lessons.append({**l, "id": f"{sid[:8]}-{i}", "main_checkout": repo.get("main_checkout", "")})
+    frictions = [{**f, "id": f"{sid[:8]}-f{i}"}
+                 for i, f in enumerate(data.get("frictions") or []) if f.get("symptom")]
     now = datetime.now().isoformat(timespec="seconds")
     meta = {"session_id": sid, "date": now, "cwd": cwd, "title": title,
             "branches": [f"{x['slug']}@{x['branch']}" for x in repos], "summary": data.get("summary", "")}
-    os.makedirs(INBOX, exist_ok=True)
-    path = os.path.join(INBOX, f"{sid}.json")
-    if lessons:
-        json.dump({**meta, "lessons": lessons}, open(path, "w"), indent=2, ensure_ascii=False)
-    elif os.path.exists(path):  # resumed session that no longer yields lessons
-        os.remove(path)
+    save(INBOX, "lessons", meta, lessons)
+    save(FRICTIONS, "frictions", meta, frictions)
+    os.makedirs(BASE, exist_ok=True)
     with open(SESSIONS, "a") as f:
         f.write(json.dumps(meta, ensure_ascii=False) + "\n")
-    log(f"ok {sid[:8]}: {len(lessons)} lesson(s), {user_turns} user turns")
+    log(f"ok {sid[:8]}: {len(lessons)} lesson(s), {len(frictions)} friction(s), "
+        f"{user_turns} user turns, {errors} tool errors")
+
+
+def save(folder, key, meta, items):
+    path = os.path.join(folder, f"{meta['session_id']}.json")
+    if items:
+        os.makedirs(folder, exist_ok=True)
+        json.dump({**meta, key: items}, open(path, "w"), indent=2, ensure_ascii=False)
+    elif os.path.exists(path):  # resumed session that no longer yields any
+        os.remove(path)
 
 
 def capture():
@@ -178,14 +207,27 @@ def capture():
     os._exit(0)
 
 
-def pending():
+def pending(folder=INBOX, key="lessons"):
     out = []
-    for name in sorted(os.listdir(INBOX)) if os.path.isdir(INBOX) else []:
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
         if name.endswith(".json"):
-            d = json.load(open(os.path.join(INBOX, name)))
-            for l in d.get("lessons", []):
+            d = json.load(open(os.path.join(folder, name)))
+            for l in d.get(key, []):
                 out.append({**l, "session_id": d["session_id"], "date": d["date"]})
     return out
+
+
+def frictions_report():
+    groups = {}
+    for f in pending(FRICTIONS, "frictions"):
+        groups.setdefault(str(f.get("target") or "other").strip("`/ ").lower(), []).append(f)
+    sessions = lambda fs: len({f["session_id"] for f in fs})
+    for target, fs in sorted(groups.items(), key=lambda g: -sessions(g[1])):
+        print(f"{sessions(fs)} session(s)  {target}")
+        for f in fs:
+            print(f"  - {f['date'][:10]} [{f['id']}] {f['symptom']}\n    → {f.get('suggestion', '')}")
+    if not groups:
+        print("no friction pending")
 
 
 def glob_match(path, pattern):
@@ -195,17 +237,18 @@ def glob_match(path, pattern):
 
 def consume(ids):
     ids = set(ids)
-    for name in os.listdir(INBOX):
-        p = os.path.join(INBOX, name)
-        if not name.endswith(".json"):
-            continue
-        d = json.load(open(p))
-        keep = [l for l in d.get("lessons", []) if l["id"] not in ids]
-        if len(keep) != len(d.get("lessons", [])):
-            if keep:
-                json.dump({**d, "lessons": keep}, open(p, "w"), indent=2, ensure_ascii=False)
-            else:
-                os.remove(p)
+    for folder, key in ((INBOX, "lessons"), (FRICTIONS, "frictions")):
+        for name in os.listdir(folder) if os.path.isdir(folder) else []:
+            p = os.path.join(folder, name)
+            if not name.endswith(".json"):
+                continue
+            d = json.load(open(p))
+            keep = [l for l in d.get(key, []) if l["id"] not in ids]
+            if len(keep) != len(d.get(key, [])):
+                if keep:
+                    json.dump({**d, key: keep}, open(p, "w"), indent=2, ensure_ascii=False)
+                else:
+                    os.remove(p)
     print(f"consumed {len(ids)}")
 
 
@@ -235,6 +278,8 @@ def main():
         repo, files = args[args.index("--repo") + 1], [a for a in args if a != "--repo"][1:]
         print(json.dumps([l for l in pending() if l.get("repo") == repo and any(
             glob_match(f, p) for p in l.get("paths", []) for f in files)], indent=1, ensure_ascii=False))
+    elif cmd == "frictions":
+        frictions_report()
     elif cmd == "consume":
         consume(args)
     elif cmd == "recall":

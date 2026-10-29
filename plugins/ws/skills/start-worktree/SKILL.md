@@ -1,7 +1,7 @@
 ---
 name: start-worktree
 description: Create a new isolated workspace with git worktree. Use when the user wants to start working on a new feature, bugfix, or task in an isolated branch. Triggers on "new feature", "start working on", "create workspace", "new worktree", "isolate work".
-allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion, Skill, mcp__notion__notion-query-data-sources, mcp__notion__notion-update-page, mcp__notion__notion-create-pages, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread]
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion, Skill, mcp__notion__notion-query-data-sources, mcp__notion__notion-update-page, mcp__notion__notion-create-pages, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, Agent]
 ---
 
 **Respond in the user's language.**
@@ -152,6 +152,20 @@ WS_INCLUDE="<comma-separated optional repos, or empty>" \
 
 **If the workspace comes from a Notion card**, send in the **same message** as the Bash call above (parallel, zero added latency) one `mcp__notion__notion-update-page` call: `{"page_id": "<card url>", "command": "update_properties", "allow_async": true, "properties": {"<config.notion.status_property>": "🔄 In Progress"}}`. A Notion failure never blocks creation — mention it in one line at the end.
 
+**Client meeting (Noota)** — only if the `mcp__noota__search_contacts` tool exists and the goal, card or mail names a client person or company. Also in the **same message** as the Bash call, launch **one background agent** so the user never waits on it: `Agent` with `run_in_background: true`, `model: "sonnet"`, description `Noota meeting link`, and this prompt filled in (from a mail, the client is the sender's domain without TLD):
+
+```
+Find the client meeting behind this task and return its link. Ask nothing; on any failure answer `none`.
+Task: <goal>. Client person: <name or none>. Client company: <company or none>. Notion card: <card url or none>.
+1. mcp__noota__search_contacts {"name": "<person>"} (no person: {"company": "<company>"}).
+2. mcp__noota__search_records {"contact_ids": [<up to 10 ids>], "start_date": "<today − 120 days>T00:00:00", "limit": 10, "user_timezone": "Europe/Paris"}. Keep up to 2 meetings whose title or summary relates to the task; none relates → the most recent one.
+3. Link per meeting: <only if config.noota.notion_data_source is set:> mcp__notion__notion-query-data-sources {"data": {"mode": "rows", "data_source_url": "<config.noota.notion_data_source>", "limit": 2, "filter": {"type": "group", "operator": "or", "filters": [{"type": "property", "property": "<config.noota.meeting_id_property, default Meeting ID>", "propertyType": "text", "operator": "string_is", "value": {"type": "exact", "value": "<record ID>"}}]}}} → the row url (the meeting's Notion page: report + full transcript). Not found → https://app.noota.io/dashboard/meetings/<record ID>.
+4. Card given → mcp__notion__notion-update-page {"page_id": "<card url>", "command": "insert_content", "position": {"type": "start"}, "allow_async": true, "content": "🎙 Réunion client : [<title> (<YYYY-MM-DD>)](<link>)"} (one line per meeting).
+5. Answer only the lines `- 🎙 <title> (<YYYY-MM-DD>) : <link>`, or `none`.
+```
+
+Once **both** the creation and the agent have notified (any order), append the agent's lines under `## Spec` in `<workspace_path>/CLAUDE.local.md` (one Edit) and show them in Step 5 — or in one line if Step 5 was already shown. `none` or an agent failure → nothing to say; never wait on it before Step 5.
+
 `WS_INCLUDE` opts optional repos in (see Step 2). Omit it or pass `""` to create only the default (non-optional) repos.
 
 What it does internally:
@@ -179,9 +193,11 @@ Show a concise success message:
   Repos:
     back  →  port 3030
     front →  port 4030
+
+  🎙 Point client X (2026-07-29) : <link>
 ```
 
-Then ask:
+(The 🎙 line only when the Noota agent of Step 4 already answered with a meeting.) Then ask:
 
 > Want me to open the dev layout? (`/workspace:open`)
 
@@ -192,7 +208,7 @@ Then ask:
 - **Never create without confirmation.** Always show the recap (Step 3) and wait for explicit approval.
 - **If a hook fails, stop and report.** Do not leave partial state.
 - **Expand `~` to `$HOME` in all paths** before running shell commands.
-- **Do NOT spawn subagents or reimplement script work inline.**
+- **Do NOT spawn subagents or reimplement script work inline** (only exception: the background Noota agent of Step 4).
 - **Do NOT use tool calls to derive branch names.** Pure string manipulation only.
 
 ---

@@ -1,6 +1,6 @@
 ---
 name: knowledge-review
-description: Turn the team lessons captured automatically at the end of Claude sessions into one PR per repo that updates `.claude/rules/`. Use weekly, or when the user says "knowledge review", "revue des leçons", "range les leçons", "/knowledge-review".
+description: Turn the team lessons captured automatically at the end of Claude sessions into one PR per repo that updates `.claude/rules/`, and list the recurring tooling frictions to fix. Use weekly, or when the user says "knowledge review", "revue des leçons", "range les leçons", "/knowledge-review".
 allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
 ---
 
@@ -33,6 +33,14 @@ Empty list → say "Aucune leçon en attente." and stop. Otherwise group lessons
 3. **Commit, push, PR:** `git commit -m "docs(claude): add team lessons from recent sessions"` (only `.claude/rules/` files), `git push -u origin HEAD`, `gh pr create --base "$BASE"` with a French body: lessons added (one line each), lessons dropped and why. If a pre-commit hook fails for a reason unrelated to docs (e.g. it boots the app and wants a migrated local DB), skip only that hook (`LEFTHOOK_EXCLUDE=<hook>`) and say so in the PR body. **Never merge.**
 4. **Clean up:** `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/ws-knowledge.py" consume <every processed id, added or dropped>`, then `git -C "<main_checkout>" worktree remove "$WT"`.
 
-## Step 3 — Report
+## Step 3 — Frictions (ONE call)
 
-PR links, counts (added / dropped / left pending), and the pending ones that need a human.
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/ws-knowledge.py" frictions
+```
+
+The same hook stores the moments where the tooling got in the way (workspace skills, worktree, ports, DB, permissions…), grouped here by target, most sessions first. First merge groups that describe the same problem under different targets (e.g. one git hook failing under `git` and `hooks`). Keep the problems seen in **≥ 2 sessions**; merge their symptoms into one line and pick the most concrete suggestion. Do not fix them here and do not consume them: the user decides, and the ids are consumed once a fix is merged.
+
+## Step 4 — Report
+
+PR links, counts (added / dropped / left pending), the pending ones that need a human, then the recurring frictions: target, sessions count, symptom, suggestion, ids.

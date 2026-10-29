@@ -20,7 +20,7 @@ Each workspace gets:
 | `/workspace:attach` | Attach a workspace to an existing directory (no worktree, no new dir) |
 | `/workspace:open` | Open (or reopen) the dev environment — WezTerm panes, background servers, or VS Code + Claude tab |
 | `/workspace:finish` | Finalize workspace — safety checks, cleanup |
-| `/workspace:knowledge-review` | Turn captured session lessons into one `.claude/rules/` PR per repo |
+| `/workspace:knowledge-review` | Turn captured session lessons into one `.claude/rules/` PR per repo, and list the recurring tooling frictions |
 | `/workspace:recall` | Find a past session from a few words, with its resume command |
 | `/workspace:mail` | Client mail that doesn't read as AI: facts checked first, right tu/vous, 3 tone versions to pick from, Gmail draft in the thread, promises tracked |
 
@@ -101,6 +101,8 @@ Add a `notion` section and `/workspace:start-worktree` (with no goal in your mes
 
 **Client mails too (optional):** add `"mail": {"query": "to:devs@example.com -from:example.com newer_than:7d", "skill": "bug-from-mail"}`. The picker then also offers the latest client mail threads (Gmail connector); picking one runs that project skill to read the thread and create the card, and the workspace starts on it. No Gmail wait: at session start a detached headless Haiku (`scripts/ws_mail_cache.py`, ~7 s, at most every 15 min) makes the search through the connector and caches the threads; the preflight reads that cache.
 
+**Client meeting link (optional, Noota MCP):** when the `noota` MCP server is connected and the task names a client person or company, `start-worktree` launches a background agent alongside the creation: it finds the client's recent Noota meeting on the topic and adds a `🎙` link under `## Spec` in `CLAUDE.local.md` and at the top of the Notion card. Add `"noota": {"notion_data_source": "collection://…", "meeting_id_property": "Meeting ID"}` when your meetings are mirrored in a Notion database: the link then points to that Notion page (report + transcript) instead of `app.noota.io`.
+
 **Faster with an integration token (optional):** store a Notion internal-integration token (connected to the board) in the macOS keychain — `security add-generic-password -U -s claude-workspaces-notion -a notion -w` (prompts, never paste it in a chat) — and the preflight fetches your sprint cards itself, in parallel, saving a whole LLM turn. "You" = the Notion member whose email is `notion_user_email` in `~/.claude-workspaces/config.json` (per user, never in a repo), else your git `user.email`. Without a token, the skill uses the Notion MCP.
 
 **PRs without a card:** `/git-pr` checks that the PR is tied to a card (`TASK-<n>` in the branch, or a Notion `Spec`). If not, it lists your open cards across all sprints (`scripts/ws_notion.py cards --all-sprints`) to catch a forgotten one, else proposes a new card in the recap and creates it with the PR (`ws_notion.py create`, existing Feature/Client values only).
@@ -164,8 +166,13 @@ Paths are plain text: the Claude Code UI prints a hook message as raw lines (`St
 What a session learns should reach the next sessions, including teammates'. Three pieces:
 
 - **Rules in the repos.** Team lessons live in each repo's `.claude/rules/*.md`. Claude Code loads a rule file natively when the session reads or edits a file matching its `paths:` frontmatter (files without `paths:` load every session). They are shared through git and reviewed in PRs.
-- **Capture.** At the end of every session (≥ 3 user messages), the `SessionEnd` hook forks a detached `claude -p --safe-mode --model sonnet` that reads the transcript and writes the confirmed team lessons to `~/.claude-workspaces/knowledge-inbox/<session>.json`, plus a summary to `~/.claude-workspaces/sessions.jsonl` (used by `/workspace:recall`). The hook returns in ~50 ms; the work runs in the background (log: `~/.claude-workspaces/knowledge-capture.log`). Disable with `WS_KNOWLEDGE_DISABLE=1`.
+- **Capture.** At the end of every session (≥ 3 user messages, or fewer when a tool call failed), the `SessionEnd` hook forks a detached `claude -p --safe-mode --model sonnet` that reads the transcript (messages + failed tool calls) and writes the confirmed team lessons to `~/.claude-workspaces/knowledge-inbox/<session>.json`, the moments where the tooling got in the way (workspace skills, worktree, ports, DB, permissions…) to `~/.claude-workspaces/friction-inbox/<session>.json`, plus a summary to `~/.claude-workspaces/sessions.jsonl` (used by `/workspace:recall`). The hook returns in ~50 ms; the work runs in the background (log: `~/.claude-workspaces/knowledge-capture.log`). Disable with `WS_KNOWLEDGE_DISABLE=1`.
 - **Landing.** `/git-pr` adds the inbox lessons matching the PR's files (`scripts/ws-knowledge.py match`); `/workspace:knowledge-review` turns the rest into one PR per repo. Nothing merges without a human.
+- **Frictions.** `scripts/ws-knowledge.py frictions` groups them by target, most sessions first; `/workspace:knowledge-review` reports the ones seen in ≥ 2 sessions. Once a fix is merged, `ws-knowledge.py consume <ids>` drops them.
+
+### Team rules by keyword (automatic)
+
+Native `.claude/rules/*.md` load on their `paths:`, so only once Claude opens a matching file: a prompt like "réponds à H&T sur le lettrage" opens none. A rule can also list `keywords: ["polo", "h&t", "lettrage"]` in its frontmatter; the `UserPromptSubmit` hook (`scripts/ws-rules-by-keyword.py`) adds the rule's body to the context when the prompt contains one of them (case and accents ignored, whole words, each rule once per session, ~50 ms, no model call).
 
 ### Session reminders (automatic)
 
