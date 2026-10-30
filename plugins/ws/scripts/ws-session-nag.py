@@ -116,6 +116,12 @@ def alive(pid):
         return False
 
 
+def capped(lines, cap=6):
+    """The first `cap` lines, indented, and how many were left out: a silent cut hides PRs."""
+    more = [f"  … et {len(lines) - cap} autre(s)"] if cap and len(lines) > cap else []
+    return [f"  {l}" for l in lines[:cap or None]] + more
+
+
 def review_blocks():
     """What ws-review-watch.py left for the user (ignored when the watcher has not run for a day)."""
     try:
@@ -140,13 +146,13 @@ def review_blocks():
     blocks = []
     if ready:
         blocks.append(f"✅ {len(ready)} de tes PR approuvée(s) sur leur dernier commit et verte(s) : prête(s) à merger :")
-        blocks += [f"  {l}" for l in ready[:6]]
+        blocks += capped(ready)
     if running:
         blocks.append(f"🛠 {len(running)} correction(s) de relecture en cours (agent auto) :")
-        blocks += [f"  {l}" for l in running[:6]]
+        blocks += capped(running)
     if waiting:
         blocks.append(f"👀 {len(waiting)} relecture(s) reçue(s) pas encore prise(s) en charge :")
-        blocks += [f"  {l}" for l in waiting[:6]]
+        blocks += capped(waiting)
     return blocks
 
 
@@ -160,8 +166,8 @@ def mail_blocks():
     if not due:
         return []
     late = lambda p: " (en retard)" if p["due"] < today else ""
-    return [f"📬 {len(due)} promesse(s) faite(s) à des clients par mail, à tenir aujourd'hui :"] + [
-        f"  {p['due']}{late(p)} {p['who']} : {p['promise'][:80]} ({p['subject'][:50]})" for p in due[:6]]
+    return [f"📬 {len(due)} promesse(s) faite(s) à des clients par mail, à tenir aujourd'hui :"] + capped(
+        [f"{p['due']}{late(p)} {p['who']} : {p['promise'][:80]} ({p['subject'][:50]})" for p in due])
 
 
 def main():
@@ -215,13 +221,13 @@ def main():
     stale = f" (état d'il y a {int(age // 3600)} h)" if age >= 3600 else f" (état d'il y a {int(age // 60)} min)" if age > FRESH else ""
     if review:
         blocks.append(f"🔀 {len(review)} PR assignée(s) à toi à relire et merger, avant d'en ouvrir une nouvelle{stale} :")
-        blocks += [f"  {l}" for l in review[:6]]
+        blocks += capped(review, cap=0)  # every one: each is a PR waiting on the user
     if unassigned:
         blocks.append(f"🙋 {len(unassigned)} de tes PR sans relecteur assigné : assigne-les avant de merger :")
-        blocks += [f"  {l}" for l in unassigned[:6]]
+        blocks += capped(unassigned)
     if lines:
         blocks.append(f"⚠️ {len(lines)} action(s) post-déploiement en attente pour toi :")
-        blocks += [f"  {l}" for l in lines[:6]]
+        blocks += capped(lines)
     blocks += watch_blocks + mail
     if not blocks:
         return
