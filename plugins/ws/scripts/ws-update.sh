@@ -110,6 +110,34 @@ fi
 # 6. Cleanup
 rm -rf "$TMP_DIR"
 
+# 6b. WezTerm: a click on a Claude notification raises the session's window (ws-focus.sh). Never fails the update.
+if [ -f "$HOME/.wezterm.lua" ] && ! grep -q ws_focus "$HOME/.wezterm.lua"; then
+  python3 - <<'PY' && echo "  ✓ WezTerm: click on a notification raises its window" || true
+import os, re
+p = os.path.expanduser("~/.wezterm.lua")
+s = open(p).read()
+handler = """-- Click on a Claude notification: ws-focus.sh asks this pane's window to come forward
+wezterm.on("user-var-changed", function(window, pane, name, value)
+\tif name == "ws_focus" then
+\t\twindow:focus()
+\tend
+end)
+
+"""
+hits = list(re.finditer(r"^return config\b", s, re.M))
+if hits:
+    i = hits[-1].start()
+    open(p, "w").write(s[:i] + handler + s[i:])
+else:
+    raise SystemExit(1)
+PY
+fi
+
+# 6c. Clicking a notification needs alerter (third-party, so only suggested, never installed here).
+if [ "$(uname -s)" = "Darwin" ] && ! command -v alerter >/dev/null 2>&1 && ! [ -x /opt/homebrew/bin/alerter ]; then
+  echo "  ⚠ click on notifications: run 'brew install vjeantet/tap/alerter'"
+fi
+
 # 7. gh stack extension (/git-pr splits oversized PRs into a stack with it). Never fails the update.
 if command -v gh >/dev/null 2>&1; then
   GH_EXTS=$(gh extension list 2>/dev/null || true)

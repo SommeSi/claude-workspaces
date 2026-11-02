@@ -171,6 +171,12 @@ What a session learns should reach the next sessions, including teammates'. Thre
 - **Landing.** `/git-pr` adds the inbox lessons matching the PR's files (`scripts/ws-knowledge.py match`); `/workspace:knowledge-review` turns the rest into one PR per repo. Nothing merges without a human.
 - **Frictions.** `scripts/ws-knowledge.py frictions` groups them by target, most sessions first; `/workspace:knowledge-review` reports the ones seen in ≥ 2 sessions. Once a fix is merged, `ws-knowledge.py consume <ids>` drops them.
 
+### Notifications: back to the right window
+
+With `alerter` (`brew install vjeantet/tap/alerter`), clicking a Claude notification or its Show button brings back the session: the WezTerm tab and window, the VS Code window, or the Claude app (`scripts/ws-focus.sh`; `terminal-notifier` click callbacks no longer fire on recent macOS). alerter sends as Terminal: allow Terminal in System Settings → Notifications, and in your Focus modes. `ws-update.sh` adds the WezTerm handler to `~/.wezterm.lua`.
+
+Keyboard: `bash ~/.claude-workspaces/focus-last.sh` jumps to the latest notification. Bind it to a global hotkey with a macOS Shortcuts "Run Shell Script" action.
+
 ### Team rules by keyword (automatic)
 
 Native `.claude/rules/*.md` load on their `paths:`, so only once Claude opens a matching file: a prompt like "réponds à H&T sur le lettrage" opens none. A rule can also list `keywords: ["polo", "h&t", "lettrage"]` in its frontmatter; the `UserPromptSubmit` hook (`scripts/ws-rules-by-keyword.py`) adds the rule's body to the context when the prompt contains one of them (case and accents ignored, whole words, each rule once per session, ~50 ms, no model call).

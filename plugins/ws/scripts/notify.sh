@@ -13,10 +13,15 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 # Read hook JSON from stdin (Claude Code pipes it to each hook command)
 HOOK_JSON=$(cat)
 
+# "Waiting for your input" comes 60 s after the end-of-task notification and would replace its summary
+if echo "$HOOK_JSON" | grep -q '"notification_type":"idle_prompt"\|Claude is waiting for your input'; then
+  exit 0
+fi
+
 # Extract last_assistant_message and trim to first sentence (max 80 chars)
 MESSAGE=""
 if [ -n "$HOOK_JSON" ] && command -v jq &>/dev/null; then
-  RAW=$(echo "$HOOK_JSON" | jq -r '.last_assistant_message // empty' 2>/dev/null)
+  RAW=$(echo "$HOOK_JSON" | jq -r '.last_assistant_message // .message // empty' 2>/dev/null)
   if [ -n "$RAW" ] && command -v python3 &>/dev/null; then
     MESSAGE=$(echo "$RAW" | python3 -c "
 import sys, re
@@ -44,6 +49,7 @@ WS_SLUG=""
 WS_BRANCH=""
 WS_SLOT=""
 WS_GOAL=""
+WS_PATH=""
 
 if [ -f "$REGISTRY" ] && command -v python3 &>/dev/null; then
   eval "$(python3 -c "
@@ -68,6 +74,7 @@ try:
         print(f'WS_BRANCH={best_ws.get(\"branch\") or best_ws.get(\"slug\", \"\")!r}')
         print(f'WS_SLOT={best_slot!r}')
         wp = best_ws.get('workspace_path', '')
+        print(f'WS_PATH={wp!r}')
         claude_md = os.path.join(wp, 'CLAUDE.local.md')
         if os.path.isfile(claude_md):
             content = open(claude_md).read()
@@ -92,15 +99,37 @@ if [ -z "$MESSAGE" ] && [ -n "$WS_GOAL" ]; then
 fi
 [ -z "$MESSAGE" ] && MESSAGE="Done"
 
+# --- What a click on the notification brings back (macOS) ---
+FOCUS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ws-focus.sh"
+ENTRY="${CLAUDE_CODE_ENTRYPOINT:-}"
+TARGET=()
+if [ -n "${WEZTERM_PANE:-}" ]; then
+  TARGET=(wezterm "$WEZTERM_PANE")
+elif [ "${TERM_PROGRAM:-}" = "vscode" ] || [ "$ENTRY" = "claude-vscode" ]; then
+  TARGET=(vscode "${WS_PATH:-$PWD}")
+elif [ "$ENTRY" = "claude-desktop" ]; then
+  TARGET=(desktop)
+elif [ "${TERM_PROGRAM:-}" = "iTerm.app" ]; then
+  TARGET=(app iTerm)
+elif [ "${TERM_PROGRAM:-}" = "Apple_Terminal" ]; then
+  TARGET=(app Terminal)
+fi
+
 # --- Send notification (platform-specific) ---
 case "$(uname -s)" in
   Darwin)
-    if command -v terminal-notifier &>/dev/null; then
+    GROUP="claude-${WS_SLUG:-default}"
+    if command -v alerter &>/dev/null && [ ${#TARGET[@]} -gt 0 ]; then
+      # terminal-notifier's click callbacks no longer fire on recent macOS (its issue #315). alerter waits
+      # for the click, so it runs detached; a session's new notification replaces its previous one.
+      pkill -f -- "--group $GROUP --sound" 2>/dev/null || true
+      nohup /bin/bash "$FOCUS" notify "$TITLE" "$MESSAGE" "$GROUP" "${TARGET[@]}" </dev/null >/dev/null 2>&1 &
+    elif command -v terminal-notifier &>/dev/null; then
       terminal-notifier \
         -title "$TITLE" \
         -message "$MESSAGE" \
         -sound Hero \
-        -group "claude-${WS_SLUG:-default}" \
+        -group "$GROUP" \
         >/dev/null 2>&1 || true
     else
       osascript -e "display notification \"$MESSAGE\" with title \"$TITLE\" sound name \"Hero\"" 2>/dev/null || true
