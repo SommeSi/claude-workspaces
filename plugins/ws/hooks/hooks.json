@@ -56,6 +56,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "mcp__claude_ai_Mintlify__(status|publish)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/ws-mintlify-drafts.py\"",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

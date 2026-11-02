@@ -187,7 +187,10 @@ At every session start, the `SessionStart` hook (`scripts/ws-session-nag.py`) li
 - **PRs assigned to you** (as reviewer/merger) still open — merge them before opening new ones;
 - **your PRs without an assignee other than you** — every PR must be assigned to a reviewer (the repos' `pr-assignee` check turns red otherwise, as a signal, never blocking);
 - **your pending post-deploy actions** — PRs declare manual steps in a `## Déploiement` section (`### Avant` / `### Après`; code actions are migration-jobs that run by themselves); the repos' GitHub Action turns it into a `post-deploy` issue (one box per action and environment) and the `deploy-prerequisites` check turns red on the deploy PR while an "Avant" box is unticked (a signal, never blocking);
-- **client promises made by mail and due today** — the `mail` skill records each commitment of a draft ("je reviens vers vous jeudi", an evolution) in `~/.claude-workspaces/mail-promises.jsonl` (`scripts/ws-mail-promises.py`); a later reply in the same thread settles them.
+- **client promises made by mail and due today** — the `mail` skill records each commitment of a draft ("je reviens vers vous jeudi", an evolution) in `~/.claude-workspaces/mail-promises.jsonl` (`scripts/ws-mail-promises.py`); a later reply in the same thread settles them;
+- **Mintlify pages waiting to be published** — a hook can't call the Mintlify connector, so `scripts/ws-mintlify-drafts.py` (PostToolUse on its `status` / `publish`) caches what Claude last saw in `~/.claude-workspaces/cache/mintlify-drafts.json`; when that count is over a day old, Claude is asked to call `status` once to refresh it. Tests: `python3 -m unittest scripts/test_ws_mintlify_drafts.py`.
+
+Finishing a workspace also refreshes docs: list them under `docs` in `.claude-workspaces.json` (`name`, `paths` as `<repo>/<prefix>`, `instructions`); when the branch's PR touched one of those paths, `/workspace:finish` follows the instructions before the teardown.
 
 It reads a cache refreshed in the background, so it adds no latency. `scripts/ws-reviewer.py` picks the least-loaded reviewer (open PRs assigned across the org; candidates = `reviewers` in the config, else recent PR authors) — `/git-pr` uses it to assign every new PR.
 
