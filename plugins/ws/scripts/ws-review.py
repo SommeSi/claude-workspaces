@@ -55,6 +55,9 @@ def snapshot(repo_path):
         if os.path.exists(real_index):
             with open(real_index, "rb") as s, open(tmp, "wb") as d:
                 d.write(s.read())
+            # Same mtime as the real index: git's racy-index guard depends on it.
+            st = os.stat(real_index)
+            os.utime(tmp, ns=(st.st_atime_ns, st.st_mtime_ns))
         else:
             os.unlink(tmp)  # no index yet: git wants a missing file, not an empty one
         env = {"GIT_INDEX_FILE": tmp}

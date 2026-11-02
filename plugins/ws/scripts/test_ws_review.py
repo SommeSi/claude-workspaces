@@ -78,6 +78,20 @@ class Snapshot(Base):
         self.assertEqual(git(self.back, "status", "--porcelain"), status + "?? new.txt")
         self.assertIn("new.txt", git(self.back, "ls-tree", "-r", "--name-only", r.REF))
 
+    def test_same_size_edit_in_index_second_is_not_missed(self):
+        # git's racy-index guard needs the temp index to keep the real index mtime
+        git(self.back, "config", "core.trustctime", "false")
+        git(self.back, "config", "core.checkStat", "minimal")
+        f, t0 = os.path.join(self.back, "a.txt"), time.time() - 100
+        os.utime(f, (t0, t0))
+        git(self.back, "update-index", "--refresh")
+        idx = os.path.join(git(self.back, "rev-parse", "--absolute-git-dir"), "index")
+        os.utime(idx, (t0, t0))
+        self.write(self.back, "a.txt", "b")  # same size as "a"
+        os.utime(f, (t0, t0))
+        r.snapshot(self.back)
+        self.assertEqual(git(self.back, "show", r.REF + ":a.txt"), "b")
+
     def test_worktrees_of_one_repo_keep_distinct_baselines(self):
         wt = os.path.join(self.root, "linked")
         git(self.back, "worktree", "add", "-q", "-b", "other", wt)
