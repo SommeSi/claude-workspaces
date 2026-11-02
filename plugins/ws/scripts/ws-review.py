@@ -27,7 +27,7 @@ _ENV = {"GIT_AUTHOR_NAME": "claude-review", "GIT_AUTHOR_EMAIL": "claude-review@l
 
 def _git(cwd, *args, env=None):
     p = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
-                       stdin=subprocess.DEVNULL, env={**os.environ, **(env or {})})
+                       stdin=subprocess.DEVNULL, timeout=4, env={**os.environ, **(env or {})})
     if p.returncode:
         raise RuntimeError((p.stderr.strip() or f"git {args[0]} failed")[-500:])
     return p.stdout.strip()

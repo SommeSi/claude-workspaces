@@ -91,6 +91,68 @@ class Snapshot(Base):
         self.assertIn("only-linked.txt", git(wt, "ls-tree", "-r", "--name-only", r.REF))
 
 
+class MidOperation(Base):
+    """The temp index makes the snapshot work while the real index is locked or mid-merge."""
+
+    def check_succeeds(self, repo):
+        head = git(repo, "rev-parse", "HEAD")
+        idx = os.path.join(git(repo, "rev-parse", "--absolute-git-dir"), "index")
+        with open(idx, "rb") as f:
+            index_before = f.read()
+        self.prompt()
+        self.assertTrue(baseline(repo))
+        self.assertEqual(git(repo, "rev-parse", "HEAD"), head)
+        with open(idx, "rb") as f:
+            self.assertEqual(f.read(), index_before)
+        self.assertFalse(os.path.exists(self.failed("back")))
+        self.assertFalse(os.path.exists(self.failed("front")))
+
+    def test_real_index_lock_present(self):
+        lock = os.path.join(git(self.back, "rev-parse", "--absolute-git-dir"), "index.lock")
+        open(lock, "w").close()
+        self.write(self.back, "n.txt", "x")
+        self.check_succeeds(self.back)
+        self.assertTrue(os.path.exists(lock))
+        self.assertIn("n.txt", git(self.back, "ls-tree", "-r", "--name-only", r.REF))
+
+    def test_merge_with_unmerged_entries(self):
+        git(self.back, "checkout", "-q", "-b", "other")
+        self.write(self.back, "a.txt", "other")
+        git(self.back, "commit", "-qam", "other")
+        git(self.back, "checkout", "-q", "main")
+        self.write(self.back, "a.txt", "main")
+        git(self.back, "commit", "-qam", "main")
+        subprocess.run(["git", "merge", "other"], cwd=self.back, capture_output=True)
+        self.assertIn("a.txt", git(self.back, "diff", "--name-only", "--diff-filter=U"))
+        self.check_succeeds(self.back)
+        self.assertIn("a.txt", git(self.back, "ls-tree", "-r", "--name-only", r.REF))
+
+    def test_rebase_stopped_midway(self):
+        git(self.back, "checkout", "-q", "-b", "other")
+        self.write(self.back, "a.txt", "other")
+        git(self.back, "commit", "-qam", "other")
+        git(self.back, "checkout", "-q", "main")
+        self.write(self.back, "a.txt", "main")
+        git(self.back, "commit", "-qam", "main")
+        git(self.back, "checkout", "-q", "other")
+        subprocess.run(["git", "rebase", "main"], cwd=self.back, capture_output=True,
+                       env={**os.environ, "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
+        self.assertTrue(os.path.isdir(os.path.join(git(self.back, "rev-parse", "--absolute-git-dir"), "rebase-merge")))
+        self.check_succeeds(self.back)
+
+    def test_git_timeout_is_recorded_as_failed(self):
+        real = r.subprocess.run
+
+        def hang(cmd, **kw):
+            if kw.get("cwd") == self.back and kw.get("timeout") == 4:
+                raise subprocess.TimeoutExpired(cmd, 4)
+            return real(cmd, **kw)
+        with mock.patch.object(r.subprocess, "run", side_effect=hang):
+            self.prompt()
+        self.assertTrue(os.path.exists(self.failed("back")))
+        self.assertTrue(baseline(self.front))
+
+
 class Prompt(Base):
     def test_prompt_covers_each_repo_in_parallel(self):
         self.prompt()
