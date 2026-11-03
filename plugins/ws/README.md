@@ -192,7 +192,7 @@ At every session start, the `SessionStart` hook (`scripts/ws-session-nag.py`) li
 
 Finishing a workspace also refreshes docs: list them under `docs` in `.claude-workspaces.json` (`name`, `paths` as `<repo>/<prefix>`, `instructions`); when the branch's PR touched one of those paths, `/workspace:finish` follows the instructions before the teardown.
 
-It reads a cache refreshed in the background, so it adds no latency. `scripts/ws-reviewer.py` picks the least-loaded reviewer (open PRs assigned across the org; candidates = `reviewers` in the config, else recent PR authors) — `/git-pr` uses it to assign every new PR.
+It reads a cache refreshed in the background, so it adds no latency. `scripts/ws-reviewer.py` picks the least-loaded reviewer (open PRs assigned across the org; candidates = `reviewers` in the config, else recent PR authors), minus `reviewers_exclude` (project config or `~/.claude-workspaces/config.json`) — `/git-pr` uses it to assign every new PR.
 
 Each workspace also gets `.claude/settings.local.json` with `autoMemoryDirectory` pointing at the project's memory, so personal auto-memory is no longer scattered (and lost) across worktree directories.
 
