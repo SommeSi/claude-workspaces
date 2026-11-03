@@ -5,7 +5,8 @@
            workspace into refs/worktree/claude-review/baseline (branch, real index and
            files untouched). A repo whose changes are still pending review in a live
            VS Code window keeps its old baseline so unreviewed hunks accumulate.
-  stop     Stop / StopFailure / SessionEnd: remove the running marker.
+  stop     Stop / StopFailure / SessionEnd: remove the running marker and record each
+           repo's HEAD in heads/<repo>.
 
 Hook JSON on stdin (cwd, session_id). Always exits 0 and never prints: stdout of
 UserPromptSubmit is added to Claude's context.
@@ -16,12 +17,16 @@ State, under $WS_HOME/review/<slug>/ (WS_HOME defaults to ~/.claude-workspaces):
   alive/<window_id>      mtime refreshed every 10 s by the extension
   failed/<repo>.json     {"reason", "at"}: "instantané interrompu" while a snapshot runs (left
                          behind if the hook is killed), removed on success
-  moved/<repo>.json      {"from", "to", "at"}: HEAD moved (pull, rebase, checkout...) while blocks
-                         were pending, so the review restarted; the extension shows it and removes it
+  heads/<repo>           HEAD at the end of the last turn, written by stop, consumed by prompt
+  moved/<repo>.json      {"from", "to", "at"}: HEAD moved between turns (pull, rebase, checkout...)
+                         while blocks were pending, so the review restarted; the extension shows
+                         it and removes it
 
-The baseline commit has HEAD as its parent (none on an unborn branch): when HEAD no longer
-matches, the snapshot is renewed even with pending blocks, so upstream changes never enter
-the review.
+A HEAD that differs from the one recorded at the end of the last turn moved between turns:
+the snapshot is renewed even with pending blocks, so upstream changes never enter the review.
+A move during Claude's turn (its own commits) leaves the recorded HEAD equal, and its blocks
+stay. No record (first turn, or a turn whose stop never ran) counts as no move.
+The baseline commit has HEAD as its parent (none on an unborn branch), for information.
 """
 import json, os, re, subprocess, sys, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
@@ -228,6 +233,17 @@ def _cleanup(d, sid):
             _rm(p)
 
 
+def _take(path):
+    """Read and remove a recorded HEAD: a turn whose stop never ran leaves no stale record."""
+    try:
+        with open(path) as f:
+            v = f.read().strip()
+    except OSError:
+        return None
+    _rm(path)
+    return v
+
+
 def on_prompt(payload, home):
     global _deadline
     _deadline = time.monotonic() + DEADLINE
@@ -256,6 +272,7 @@ def _prompt(payload, home):
             return
         failed = os.path.join(d, "failed", name + ".json")
         moved = os.path.join(d, "moved", name + ".json")
+        recorded = _take(os.path.join(d, "heads", name))
         marker = None
         try:
             with open(failed) as f:
@@ -265,8 +282,8 @@ def _prompt(payload, home):
         try:
             # Left in place if Claude Code kills the hook before the end: the extension shows it.
             _write_json(failed, {"reason": INTERRUPTED, "at": _now()})
-            head, base, parent = _heads(path)
-            branch_moved = base is not None and head != parent
+            head, base, _ = _heads(path)
+            branch_moved = base is not None and recorded is not None and head != recorded
             pending = _pending(d, name)
             if fresh and pending and not branch_moved:
                 if previous is None:
@@ -276,7 +293,7 @@ def _prompt(payload, home):
                         f.write(previous)
                 return  # unreviewed hunks remain: keep the old baseline
             if branch_moved and pending:
-                marker = {"from": parent, "to": head, "at": _now()}
+                marker = {"from": recorded, "to": head, "at": _now()}
                 _write_json(moved, marker)  # before the ref moves: the extension never misses it
             _, big = snapshot(path, head)
         except Exception as e:
@@ -285,7 +302,8 @@ def _prompt(payload, home):
             _write_json(failed, {"reason": str(e), "at": _now()})
         else:
             if big:
-                _write_json(failed, {"reason": "fichiers trop gros ignorés : " + ", ".join(big), "at": _now()})
+                _write_json(failed, {"reason": "fichiers trop gros ignorés : " + ", ".join(big),
+                                     "files": big, "at": _now()})
             else:
                 _rm(failed)
 
@@ -294,13 +312,31 @@ def _prompt(payload, home):
 
 
 def on_stop(payload, home):
-    slug, _ = _resolve(payload, home)
-    sid = payload.get("session_id")
-    if sid:
-        try:
-            os.unlink(os.path.join(home, "review", slug, "running", sid))
-        except OSError:
-            pass
+    global _deadline
+    _deadline = time.monotonic() + DEADLINE
+    try:
+        slug, repos = _resolve(payload, home)
+        d = os.path.join(home, "review", slug)
+        sid = payload.get("session_id")
+        if sid:
+            _rm(os.path.join(d, "running", sid))
+
+        def record(repo):
+            name, path = repo
+            try:
+                head = _git(path, "rev-parse", "-q", "--verify", "HEAD", ok=(0, 1)) if os.path.isdir(path) else ""
+                if head:
+                    os.makedirs(os.path.join(d, "heads"), exist_ok=True)
+                    tmp = os.path.join(d, "heads", f".{name}.{os.getpid()}.tmp")
+                    with open(tmp, "w") as f:
+                        f.write(head + "\n")
+                    os.replace(tmp, os.path.join(d, "heads", name))
+            except Exception:
+                pass
+        with ThreadPoolExecutor(max_workers=max(1, len(repos))) as ex:
+            list(ex.map(record, repos))
+    finally:
+        _deadline = None
 
 
 def main():

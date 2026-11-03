@@ -281,12 +281,27 @@ class HeadLink(Base):
         self.assertEqual(parent(repo), "")
         self.assertIn("f.txt", git(repo, "ls-tree", "-r", "--name-only", r.REF))
 
-    def test_head_change_advances_despite_fresh_pending(self):
+    def stop(self, sid="s1"):
+        r.on_stop({"cwd": self.ws, "session_id": sid}, self.home)
+
+    def head_file(self, name):
+        return os.path.join(self.state, "heads", name)
+
+    def test_stop_records_each_repo_head(self):
         self.prompt()
+        self.stop()
+        for repo, name in ((self.back, "back"), (self.front, "front")):
+            with open(self.head_file(name)) as f:
+                self.assertEqual(f.read().strip(), git(repo, "rev-parse", "HEAD"))
+
+    def test_head_move_between_turns_advances_despite_fresh_pending(self):
+        self.prompt()
+        self.stop()
         old = baseline(self.back)
+        recorded = git(self.back, "rev-parse", "HEAD")
         self.pending("back")
         self.alive()
-        self.commit_upstream(self.back)
+        self.commit_upstream(self.back)  # the user pulls between two turns
         self.prompt()
         self.assertNotEqual(baseline(self.back), old)
         head = git(self.back, "rev-parse", "HEAD")
@@ -294,11 +309,34 @@ class HeadLink(Base):
         self.assertIn("up.txt", git(self.back, "ls-tree", "-r", "--name-only", r.REF))
         with open(self.moved("back")) as f:
             info = json.load(f)
-        self.assertEqual((info["to"], bool(info["from"]), bool(info["at"])), (head, True, True))
+        self.assertEqual((info["from"], info["to"], bool(info["at"])), (recorded, head, True))
         self.assertFalse(os.path.exists(self.moved("front")))
+
+    def test_claude_commit_during_turn_stays_in_review(self):
+        self.prompt()
+        old = baseline(self.back)
+        self.pending("back")
+        self.alive()
+        self.commit_upstream(self.back, "claude.txt")  # Claude commits during its own turn
+        self.stop()
+        self.prompt()
+        self.assertEqual(baseline(self.back), old)
+        self.assertIn("claude.txt", git(self.back, "diff", "--name-only", r.REF))
+        self.assertFalse(os.path.exists(self.moved("back")))
+
+    def test_no_recorded_head_keeps_baseline(self):
+        self.prompt()
+        old = baseline(self.back)
+        self.pending("back")
+        self.alive()
+        self.commit_upstream(self.back)
+        self.prompt()  # no stop ever ran: nothing recorded
+        self.assertEqual(baseline(self.back), old)
+        self.assertFalse(os.path.exists(self.moved("back")))
 
     def test_same_head_keeps_baseline_and_writes_no_marker(self):
         self.prompt()
+        self.stop()
         old = baseline(self.back)
         self.pending("back")
         self.alive()
@@ -307,8 +345,9 @@ class HeadLink(Base):
         self.assertEqual(baseline(self.back), old)
         self.assertFalse(os.path.exists(self.moved("back")))
 
-    def test_head_change_without_pending_writes_no_marker(self):
+    def test_head_move_without_pending_writes_no_marker(self):
         self.prompt()
+        self.stop()
         self.commit_upstream(self.back)
         self.prompt()
         self.assertEqual(parent(self.back), git(self.back, "rev-parse", "HEAD"))
@@ -425,10 +464,12 @@ class LargeFiles(Base):
         self.assertNotIn("huge.bin", files)
         self.assertNotIn("sub dir/big [1].bin", files)
         with open(self.failed("back")) as f:
-            reason = json.load(f)["reason"]
+            info = json.load(f)
+        reason = info["reason"]
         self.assertTrue(reason.startswith("fichiers trop gros ignorés : "), reason)
         self.assertIn("huge.bin", reason)
         self.assertIn("sub dir/big [1].bin", reason)
+        self.assertEqual(sorted(info["files"]), ["huge.bin", "sub dir/big [1].bin"])
         self.assertFalse(os.path.exists(self.failed("front")))
 
     def test_large_tracked_file_stays_in_snapshot(self):
