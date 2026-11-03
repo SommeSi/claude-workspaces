@@ -21,11 +21,16 @@ reg = os.environ.get("WS_REGISTRY") or os.path.expanduser("~/.claude-workspaces/
 target = os.path.realpath(os.environ["TARGET"])
 best, match = -1, ("", "")
 try:
-    for w in json.load(open(reg)).get("workspaces", {}).values():
-        wp = os.path.realpath(w.get("workspace_path", "") or "")
-        if wp and (target == wp or target.startswith(wp + os.sep)) and len(wp) > best:
-            best, match = len(wp), (w.get("slug", ""), wp)
-except (OSError, ValueError):
+    data = json.load(open(reg))
+    ws = data.get("workspaces", {}) if isinstance(data, dict) else data
+    for w in (ws.values() if isinstance(ws, dict) else ws if isinstance(ws, list) else []):
+        if not isinstance(w, dict) or not w.get("slug") or not w.get("workspace_path"):
+            continue
+        wp = os.path.realpath(w["workspace_path"])
+        if target == wp or target.startswith(wp + os.sep):
+            if len(wp) > best:
+                best, match = len(wp), (w["slug"], wp)
+except (OSError, ValueError, AttributeError, TypeError):
     pass
 print(match[0] or "-", match[1] or "-")
 PYEOF
@@ -53,6 +58,8 @@ fi
 "$CODE" "$OPEN" || { echo "human-review: failed to launch VS Code" >&2; exit 1; }
 echo "VS Code opened on $KIND: $OPEN"
 
-if ! "$CODE" --list-extensions 2>/dev/null | grep -qix 'sommesi.claude-review'; then
+# Captured first: under pipefail, `code ... | grep -q` fails when grep stops reading early.
+EXTS="$("$CODE" --list-extensions 2>/dev/null || true)"
+if ! grep -qix 'sommesi.claude-review' <<<"$EXTS"; then
   echo "The Claude Review extension (sommesi.claude-review) is not installed yet — VS Code is open without the review view."
 fi

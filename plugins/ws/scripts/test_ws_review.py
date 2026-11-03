@@ -158,7 +158,7 @@ class MidOperation(Base):
         real = r.subprocess.run
 
         def hang(cmd, **kw):
-            if kw.get("cwd") == self.back and kw.get("timeout") == 4:
+            if kw.get("cwd") == self.back:
                 raise subprocess.TimeoutExpired(cmd, 4)
             return real(cmd, **kw)
         with mock.patch.object(r.subprocess, "run", side_effect=hang):
@@ -220,6 +220,14 @@ class Prompt(Base):
         self.assertTrue(baseline(self.front))
         self.assertFalse(os.path.exists(self.failed("front")))
 
+    def test_kept_baseline_keeps_previous_failed(self):
+        self.prompt()
+        _ = self.pending("back"), self.alive()
+        r._write_json(self.failed("back"), {"reason": "earlier", "at": "t"})
+        self.prompt()
+        with open(self.failed("back")) as f:
+            self.assertEqual(json.load(f)["reason"], "earlier")
+
     def test_success_clears_previous_failed(self):
         os.makedirs(os.path.join(self.state, "failed"))
         for n in ("back", "front"):
@@ -244,10 +252,199 @@ class Prompt(Base):
         self.assertTrue(baseline(solo))
 
 
+def parent(repo):
+    return git(repo, "log", "-1", "--format=%P", r.REF)
+
+
+class HeadLink(Base):
+    """I1: the baseline records HEAD as its parent; a moved HEAD restarts the review."""
+
+    def moved(self, name):
+        return os.path.join(self.state, "moved", name + ".json")
+
+    def commit_upstream(self, repo, name="up.txt"):
+        # what a pull, rebase or checkout does: HEAD moves and brings files with it
+        self.write(repo, name, "upstream")
+        git(repo, "add", name)
+        git(repo, "commit", "-q", "-m", "upstream")
+
+    def test_snapshot_parent_is_head(self):
+        r.snapshot(self.back)
+        self.assertEqual(parent(self.back), git(self.back, "rev-parse", "HEAD"))
+
+    def test_unborn_branch_snapshot_has_no_parent(self):
+        repo = os.path.join(self.root, "unborn")
+        os.makedirs(repo)
+        git(repo, "init", "-q", "-b", "main")
+        self.write(repo, "f.txt", "x")
+        r.snapshot(repo)
+        self.assertEqual(parent(repo), "")
+        self.assertIn("f.txt", git(repo, "ls-tree", "-r", "--name-only", r.REF))
+
+    def test_head_change_advances_despite_fresh_pending(self):
+        self.prompt()
+        old = baseline(self.back)
+        self.pending("back")
+        self.alive()
+        self.commit_upstream(self.back)
+        self.prompt()
+        self.assertNotEqual(baseline(self.back), old)
+        head = git(self.back, "rev-parse", "HEAD")
+        self.assertEqual(parent(self.back), head)
+        self.assertIn("up.txt", git(self.back, "ls-tree", "-r", "--name-only", r.REF))
+        with open(self.moved("back")) as f:
+            info = json.load(f)
+        self.assertEqual((info["to"], bool(info["from"]), bool(info["at"])), (head, True, True))
+        self.assertFalse(os.path.exists(self.moved("front")))
+
+    def test_same_head_keeps_baseline_and_writes_no_marker(self):
+        self.prompt()
+        old = baseline(self.back)
+        self.pending("back")
+        self.alive()
+        self.write(self.back, "n.txt", "x")
+        self.prompt()
+        self.assertEqual(baseline(self.back), old)
+        self.assertFalse(os.path.exists(self.moved("back")))
+
+    def test_head_change_without_pending_writes_no_marker(self):
+        self.prompt()
+        self.commit_upstream(self.back)
+        self.prompt()
+        self.assertEqual(parent(self.back), git(self.back, "rev-parse", "HEAD"))
+        self.assertFalse(os.path.exists(self.moved("back")))
+
+
+class Interrupted(Base):
+    """I2: a hook killed mid-snapshot leaves a failed marker; git calls share one deadline."""
+
+    def test_failed_marker_is_written_before_the_snapshot(self):
+        seen = {}
+        real = r.snapshot
+
+        def spy(path, *a, **kw):
+            name = os.path.basename(path)
+            try:
+                with open(self.failed(name)) as f:
+                    seen[name] = json.load(f)["reason"]
+            except OSError:
+                seen[name] = None
+            return real(path, *a, **kw)
+        with mock.patch.object(r, "snapshot", side_effect=spy):
+            self.prompt()
+        self.assertEqual(seen, {"back": "instantané interrompu", "front": "instantané interrompu"})
+        self.assertFalse(os.path.exists(self.failed("back")))
+        self.assertFalse(os.path.exists(self.failed("front")))
+
+    def test_slow_git_shares_one_deadline_per_prompt(self):
+        import shutil
+        real_git = shutil.which("git")
+        bin_dir = os.path.join(self.root, "bin")
+        os.makedirs(bin_dir)
+        with open(os.path.join(bin_dir, "git"), "w") as f:
+            f.write('#!/bin/sh\ncase "$PWD" in "$SLOW_DIR"*) sleep 1;; esac\nexec "%s" "$@"\n' % real_git)
+        os.chmod(os.path.join(bin_dir, "git"), 0o755)
+        env = {"PATH": bin_dir + os.pathsep + os.environ["PATH"], "SLOW_DIR": self.back}
+        t0 = time.monotonic()
+        with mock.patch.dict(os.environ, env):
+            self.prompt()
+        elapsed = time.monotonic() - t0
+        self.assertLess(elapsed, r.DEADLINE + 0.8)
+        self.assertTrue(os.path.exists(self.failed("back")))
+        self.assertTrue(baseline(self.front))
+
+
+class Registry(Base):
+    """Same filter as the extension's workspace.ts: unusable entries are skipped, never fatal."""
+
+    def write_registry(self, entries):
+        with open(os.path.join(self.home, "registry.json"), "w") as f:
+            json.dump({"workspaces": entries}, f)
+
+    def test_entry_without_slug_is_skipped_and_hook_still_snapshots(self):
+        self.write_registry({"1": {"workspace_path": self.ws, "repos": [{"name": "back", "path": self.back}]}})
+        self.prompt(cwd=self.back)
+        self.assertTrue(baseline(self.back))
+        slug = r.re.sub(r"[^A-Za-z0-9]", "-", self.back)
+        self.assertTrue(os.path.exists(os.path.join(self.home, "review", slug, "running", "s1")))
+
+    def test_entry_with_non_list_repos_is_skipped(self):
+        self.write_registry({"1": {"slug": "feat", "workspace_path": self.ws, "repos": {"back": self.back}}})
+        self.prompt(cwd=self.back)
+        self.assertTrue(baseline(self.back))
+        self.assertFalse(os.path.exists(os.path.join(self.state, "running", "s1")))
+
+    def test_list_registry_and_repo_without_name_are_tolerated(self):
+        self.write_registry([{"slug": "feat", "workspace_path": self.ws,
+                              "repos": [{"path": self.front}, {"name": "back", "path": self.back}]}])
+        self.prompt()
+        self.assertTrue(baseline(self.back))
+        self.assertTrue(os.path.exists(os.path.join(self.state, "running", "s1")))
+
+
+class Cleanup(Base):
+    def touch(self, *parts, age=0):
+        p = os.path.join(self.state, *parts)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "w").close()
+        t = time.time() - age
+        os.utime(p, (t, t))
+        return p
+
+    def test_old_state_files_are_removed(self):
+        sessions = os.path.join(self.root, "sessions")
+        os.makedirs(sessions)
+        for sid, pid in (("dead", 99999999), ("live", os.getpid())):
+            with open(os.path.join(sessions, sid + ".json"), "w") as f:
+                json.dump({"sessionId": sid, "pid": pid}, f)
+        old_alive = self.touch("alive", "old", age=2 * 86400)
+        new_alive = self.touch("alive", "new", age=120)
+        dead = self.touch("running", "dead")
+        live = self.touch("running", "live", age=3 * 86400)
+        unknown_old = self.touch("running", "unknown-old", age=2 * 86400)
+        unknown_new = self.touch("running", "unknown-new", age=60)
+        tmp_old = self.touch("pending", ".back.123.tmp", age=2 * 3600)
+        tmp_new = self.touch("pending", ".front.456.tmp", age=60)
+        with mock.patch.dict(os.environ, {"CLAUDE_REVIEW_SESSIONS_DIR": sessions}):
+            self.prompt(sid="s1")
+        gone = [p for p in (old_alive, dead, unknown_old, tmp_old) if os.path.exists(p)]
+        kept = [p for p in (new_alive, live, unknown_new, tmp_new, os.path.join(self.state, "running", "s1")) if not os.path.exists(p)]
+        self.assertEqual((gone, kept), ([], []))
+
+
+class LargeFiles(Base):
+    def test_large_untracked_file_is_left_out_and_recorded(self):
+        self.write(self.back, "small.txt", "x")
+        self.write(self.back, "huge.bin", "y" * 100)
+        os.makedirs(os.path.join(self.back, "sub dir"))
+        self.write(self.back, "sub dir/big [1].bin", "z" * 100)
+        with mock.patch.object(r, "MAX_UNTRACKED", 50):
+            self.prompt()
+        files = git(self.back, "ls-tree", "-r", "--name-only", r.REF).splitlines()
+        self.assertIn("small.txt", files)
+        self.assertNotIn("huge.bin", files)
+        self.assertNotIn("sub dir/big [1].bin", files)
+        with open(self.failed("back")) as f:
+            reason = json.load(f)["reason"]
+        self.assertTrue(reason.startswith("fichiers trop gros ignorés : "), reason)
+        self.assertIn("huge.bin", reason)
+        self.assertIn("sub dir/big [1].bin", reason)
+        self.assertFalse(os.path.exists(self.failed("front")))
+
+    def test_large_tracked_file_stays_in_snapshot(self):
+        self.write(self.back, "big.txt", "y" * 100)
+        git(self.back, "add", "big.txt")
+        git(self.back, "commit", "-q", "-m", "big")
+        with mock.patch.object(r, "MAX_UNTRACKED", 50):
+            self.prompt()
+        self.assertIn("big.txt", git(self.back, "ls-tree", "-r", "--name-only", r.REF))
+        self.assertFalse(os.path.exists(self.failed("back")))
+
+
 class FindWorkspace(unittest.TestCase):
     def test_longest_prefix_wins(self):
-        reg = {"workspaces": {"1": {"slug": "outer", "workspace_path": "/nonexistent/a"},
-                              "2": {"slug": "inner", "workspace_path": "/nonexistent/a/b"}}}
+        reg = {"workspaces": {"1": {"slug": "outer", "workspace_path": "/nonexistent/a", "repos": []},
+                              "2": {"slug": "inner", "workspace_path": "/nonexistent/a/b", "repos": []}}}
         self.assertEqual(r.find_workspace("/nonexistent/a/b/back", reg)["slug"], "inner")
         self.assertEqual(r.find_workspace("/nonexistent/a/c", reg)["slug"], "outer")
         self.assertIsNone(r.find_workspace("/nonexistent/ab", reg))

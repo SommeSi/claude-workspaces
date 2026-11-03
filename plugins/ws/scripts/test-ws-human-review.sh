@@ -13,7 +13,13 @@ fail() { echo "✗ $1"; [ -n "${OUT:-}" ] && echo "--- output ---" && echo "$OUT
 
 cat > "$TMP/code" <<'EOF2'
 #!/bin/bash
-if [ "$1" = "--list-extensions" ]; then echo "${FAKE_EXT:-}"; else echo "$1" >> "$FAKE_LOG"; fi
+if [ "$1" = "--list-extensions" ]; then
+  echo "${FAKE_EXT:-}"
+  # a long list after the match: the writer dies of SIGPIPE once grep -q has its answer
+  [ -n "${FAKE_MANY:-}" ] && { yes pub.other-ext | head -n 300000; exit $?; }
+  exit 0
+fi
+echo "$1" >> "$FAKE_LOG"
 EOF2
 chmod +x "$TMP/code"
 
@@ -51,5 +57,17 @@ OUT=$(FAKE_EXT="sommesi.claude-review" bash "$SCRIPT" "$TMP/plain" 2>&1) || fail
 
 # 5. .code-workspace untouched
 [ "$(cat "$WS/feat-x.code-workspace")" = '{}' ] || fail ".code-workspace was modified"
+
+# 6. extension listed first among many: grep -q stops early, pipefail must not report it absent
+: > "$FAKE_LOG"
+OUT=$(FAKE_MANY=1 FAKE_EXT="sommesi.claude-review" bash "$SCRIPT" "$WS/back" 2>&1) || fail "script failed"
+echo "$OUT" | grep -q "not installed" && fail "false 'not installed' under pipefail"
+
+# 7. list-shaped registry: no traceback, falls back to git
+echo '[{"slug":"feat-x","workspace_path":"'"$WS"'"}]' > "$WS_REGISTRY"
+: > "$FAKE_LOG"
+OUT=$(FAKE_EXT="sommesi.claude-review" bash "$SCRIPT" "$WS/back" 2>&1) || fail "script failed on list registry"
+echo "$OUT" | grep -q "Traceback" && fail "traceback on list registry"
+[ "$(cat "$FAKE_LOG")" = "$WS/feat-x.code-workspace" ] || fail "list registry should still resolve: $(cat "$FAKE_LOG")"
 
 echo "✓ ws-human-review: all checks passed"
