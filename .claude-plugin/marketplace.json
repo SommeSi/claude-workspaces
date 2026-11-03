@@ -39,7 +39,7 @@
     {
       "name": "estimation",
       "description": "Chiffrer une feature ou un connecteur en « dev IA » (attention humaine, temps Claude, délai), calé sur l'historique réel des livraisons, et rédiger le devis client dans Notion",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": {
         "name": "sommesi"
       },
