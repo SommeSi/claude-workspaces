@@ -10,10 +10,22 @@
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
-WS_PATH="$1"
-SLOT="$2"
+WS_PATH="${1%/}"
+SLOT="${2:-}"
 
 REG="$HOME/.claude-workspaces/registry.json"
+
+# Safety: this script rm -rf's WS_PATH. Only accept the exact path the registry
+# holds for this slot — an empty/mangled arg (e.g. zsh not word-splitting a loop
+# var) once handed it the parent worktrees/ dir and wiped every workspace.
+REG_PATH=$(SLOT="$SLOT" REG="$REG" python3 -c '
+import json, os
+try: print(json.load(open(os.environ["REG"]))["workspaces"][os.environ["SLOT"]]["workspace_path"].rstrip("/"))
+except Exception: pass' 2>/dev/null || true)
+if [ -z "$WS_PATH" ] || [ -z "$SLOT" ] || [ "$WS_PATH" != "$REG_PATH" ]; then
+  echo "✗ refusing: path '$WS_PATH' is not the registered path of slot '$SLOT' ('${REG_PATH:-none}')" >&2
+  exit 1
+fi
 
 # Locate config (honor CONFIG/PROJECT_ROOT passed via env first)
 CONFIG="${CONFIG:-}"
