@@ -9,6 +9,7 @@ Mise en page reprise de la « vue devis » Filiz, adaptée aux trois mesures du 
 - **Jamais dans la page** : heures Claude, noms internes, autres clients, noms de code, outils internes. Pas de prix ni de taux journalier, sauf demande explicite.
 - **Marge** : si une marge commerciale est ajoutée, l'écrire en clair (« marge de 15 % incluse ») au lieu de la répartir dans les lignes.
 - **Vérifier les sommes** : sous-parties = étape, étapes = lot, lots = synthèse, synthèse = total annoncé.
+- **Le total se voit en premier** : un encadré (callout Notion 🧾) juste sous l'introduction, puis la dernière ligne du tableau de synthèse. Jamais seulement une phrase en gras sous un tableau : dans Notion, elle passe inaperçue.
 - Chaque sous-partie dit ce qu'elle apporte : **Sécurité**, **Tests**, **Reprise sur erreur**, **Recette**.
 - La recette, la mise en production et les échanges sont **toujours une étape à part** : c'est du temps de vérification, il ne se raccourcit pas.
 
@@ -20,14 +21,15 @@ Icône 🧾 · Titre : `Devis — {Connecteur Source → Cible | Nom de la fonct
 
 > {Ce que fait la livraison, en une phrase} pour {Client}. Chiffrage en jours de travail de notre équipe. Version du {JJ/MM/AAAA}.
 
+Callout 🧾 (fond coloré) : **Total : {bas} à {haut} jours de travail** · délai indicatif {n} semaines ouvrées, recette comprise. Options et hors périmètre en fin de document.
+
 # Synthèse
 
 | Lot | Résultat pour {Client} | Jours |
 |---|---|---|
 | **Lot 1 — {titre}** | {ce que le client obtient, en mots métier} | **{bas} à {haut}** |
 | **Lot 2 — {titre}** | {…} | **{valeur ferme}** |
-
-**Total : {bas} à {haut} jours.** Options et hors périmètre en fin de document.
+| **Total** | | **{bas} à {haut}** |
 
 ## Pourquoi une fourchette
 
@@ -120,11 +122,12 @@ Environ {n} semaines ouvrées, recette comprise, à compter de la réception des
 
 > Connecteur Outil X → Pennylane pour Société Exemple. Chiffrage en jours de travail de notre équipe. Version du 26/10/2026.
 
+Callout 🧾 : **Total : 3,5 à 4,5 jours de travail** · délai indicatif 3 semaines ouvrées, recette comprise.
+
 | Lot | Résultat pour Société Exemple | Jours |
 |---|---|---|
 | **Lot 1 — Factures Outil X → Pennylane** | Chaque facture émise dans Outil X arrive dans Pennylane, avec son PDF, sans saisie | **3,5 à 4,5** |
-
-**Total : 3,5 à 4,5 jours.**
+| **Total** | | **3,5 à 4,5** |
 
 **Pourquoi une fourchette** : nous n'avons pas encore d'accès de test à Outil X. **Borne basse** : les réponses sont conformes à la documentation. **Borne haute** : écarts sur les vraies factures. **Engagement** : chiffrage resserré dans les 2 jours ouvrés qui suivent la réception des accès.
 

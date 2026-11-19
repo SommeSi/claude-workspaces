@@ -204,6 +204,41 @@ if will_delete and repos:
             overall = "warn"
         warnings.extend(lines)
 
+# --- Docs to refresh (config "docs": [{name, paths, instructions}]) ------
+# A doc is hit when the branch touched one of its paths ("<repo>/<prefix>").
+doc_hits = []        # (name, [files])
+docs = []
+if config_path:
+    try:
+        docs = json.load(open(config_path)).get("docs") or []
+    except Exception:
+        docs = []
+if docs and will_delete and mode == "worktree":
+    touched = []
+    for r in repos:
+        path, name = r.get("path", ""), r.get("name", "?")
+        branch = sh(["git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"]) if os.path.isdir(path) else ""
+        if not branch or branch == "HEAD":
+            continue
+        # The branch's PR lists exactly its files, merged or not; without a PR,
+        # diff against where it forked from its base.
+        files = subprocess.run(
+            ["gh", "pr", "list", "--head", branch, "--state", "all", "--limit", "1",
+             "--json", "files", "-q", ".[0].files[].path"],
+            cwd=path, capture_output=True, text=True).stdout.split()
+        if not files:
+            for base in ("origin/develop", "origin/main", "origin/master"):
+                mb = sh(["git", "-C", path, "merge-base", base, "HEAD"])
+                if mb:
+                    files = sh(["git", "-C", path, "diff", "--name-only", mb, "HEAD"]).split()
+                    break
+        if files:
+            touched += [f"{name}/{f}" for f in files if f]
+    for d in docs:
+        hit = [f for f in touched if any(f.startswith(p) for p in d.get("paths", []))]
+        if hit:
+            doc_hits.append((d.get("name", "?"), hit))
+
 # --- Build human recap --------------------------------------------------
 repo_lines = []
 for r in repos:
@@ -244,6 +279,12 @@ else:
 print()
 
 # What the cleanup will do
+if doc_hits:
+    print("  Docs   :")
+    for name, hit in doc_hits:
+        print(f"    📘 {name} — {len(hit)} file(s) touched → drafts updated before cleanup")
+    print()
+
 print("  Cleanup will:")
 if ports:
     print(f"    • kill processes on port(s): {', '.join(ports)}")
@@ -289,4 +330,6 @@ print(f"WS_SPEC={spec}")
 print(f"WS_HISTORY={history}")
 print(f"WS_ACTUALS={actuals_proc.communicate(timeout=60)[0].strip() if actuals_proc else ''}")
 print(f"OVERALL={overall}")
+for name, hit in doc_hits:
+    print(f"WS_DOC={name}\t{','.join(hit)}")
 PYEOF

@@ -5,10 +5,11 @@
 
 Candidates: `reviewers` in the project's .claude-workspaces.json if set, else the
 people who authored a PR merged in this repo over the last 45 days (bots excluded).
-The author (you) is never a candidate. Load = open PRs assigned to them across the
+The author (you) is never a candidate, nor anyone in `reviewers_exclude` (project config, found in
+the repo, its parent or a sibling repo of the workspace, plus ~/.claude-workspaces/config.json). Load = open PRs assigned to them across the
 whole GitHub org. Ties go to whoever you assigned least in your last 30 PRs.
 """
-import json, os, re, subprocess, sys
+import glob, json, os, re, subprocess, sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
@@ -20,15 +21,25 @@ def gh(*args):
     return json.loads(r.stdout or "null")
 
 
-def configured_reviewers():
+def project_config():
+    """The workspace's .claude-workspaces.json: in the repo, its parent, or a sibling repo (front next to back)."""
     d = os.getcwd()
     while d != "/":
-        for base in (d, os.path.dirname(d)):
-            p = os.path.join(base, ".claude-workspaces.json")
+        parent = os.path.dirname(d)
+        for p in [os.path.join(d, ".claude-workspaces.json"), os.path.join(parent, ".claude-workspaces.json"),
+                  *sorted(glob.glob(os.path.join(parent, "*", ".claude-workspaces.json")))]:
             if os.path.isfile(p):
-                return json.load(open(p)).get("reviewers")
-        d = os.path.dirname(d)
-    return None
+                return json.load(open(p))
+        d = parent
+    return {}
+
+
+def excluded(cfg):
+    try:
+        user = json.load(open(os.path.expanduser("~/.claude-workspaces/config.json")))
+    except (OSError, ValueError):
+        user = {}
+    return {x.lower() for x in cfg.get("reviewers_exclude", []) + user.get("reviewers_exclude", [])}
 
 
 def main():
@@ -38,7 +49,8 @@ def main():
         sys.exit("REVIEWER=\n# not in a GitHub repo")
     owner, repo = m.groups()
     me = gh("api", "user")["login"]
-    candidates = configured_reviewers()
+    cfg = project_config()
+    candidates = cfg.get("reviewers")
     if not candidates:
         since = datetime.now(timezone.utc) - timedelta(days=45)
         merged = gh("pr", "list", "-R", f"{owner}/{repo}", "--state", "merged", "--limit", "100",
@@ -46,7 +58,8 @@ def main():
         candidates = sorted({p["author"]["login"] for p in merged
                              if not p["author"].get("is_bot") and "[bot]" not in p["author"]["login"]
                              and datetime.fromisoformat(p["mergedAt"].replace("Z", "+00:00")) >= since})
-    candidates = [c for c in candidates if c.lower() != me.lower()]
+    skip = excluded(cfg) | {me.lower()}
+    candidates = [c for c in candidates if c.lower() not in skip]
     if not candidates:
         sys.exit("REVIEWER=\n# no candidate reviewer")
     open_prs = gh("search", "prs", "--owner", owner, "--state", "open", "--limit", "200", "--json", "assignees")

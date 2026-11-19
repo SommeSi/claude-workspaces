@@ -11,6 +11,8 @@
    watcher could not hand to an agent yet.
 Also warms the client-mail cache of start-worktree's picker (ws_mail_cache.py, detached).
 
+6. Mintlify pages edited but not published, as ws-mintlify-drafts.py last saw them.
+
 5. Client promises made by mail (ws-mail-promises.py, written by the `mail` skill) due
    today or overdue: the client should not have to chase us.
 
@@ -26,6 +28,7 @@ import datetime, importlib.util, json, os, re, subprocess, sys, threading, time
 CACHE = os.path.expanduser("~/.claude-workspaces/cache/session-nag.json")
 WATCH = os.path.expanduser("~/.claude-workspaces/review-watch.json")
 AUTOFIX = os.path.expanduser("~/.claude-workspaces/autofix")
+DRAFTS = os.path.expanduser("~/.claude-workspaces/cache/mintlify-drafts.json")
 TTL = 600
 FRESH = 120
 FIELDS = "number,title,url,author,assignees,repository,isDraft"
@@ -170,6 +173,24 @@ def mail_blocks():
         [f"{p['due']}{late(p)} {p['who']} : {p['promise'][:80]} ({p['subject'][:50]})" for p in due])
 
 
+def drafts_blocks():
+    """Unpublished Mintlify pages; a count older than a day asks Claude to look again."""
+    try:
+        cache = json.load(open(DRAFTS))
+    except (OSError, ValueError):
+        return [], []
+    blocks, stale = [], []
+    for sub, d in sorted(cache.items()):
+        age = time.time() - d.get("at", 0)
+        if age > 86400:
+            stale.append(sub)
+        if d.get("files"):
+            when = f" (état d'il y a {int(age // 86400)} j)" if age > 86400 else ""
+            blocks.append(f"📝 {len(d['files'])} page(s) en brouillon à valider dans Mintlify ({sub}){when} :"
+                          f" https://app.mintlify.com/{sub}/{sub}/editor/main")
+    return blocks, stale
+
+
 def main():
     try:
         event = json.load(sys.stdin)
@@ -181,7 +202,8 @@ def main():
     repos = slugs(event.get("cwd") or os.getcwd())
     watch_blocks = review_blocks()
     mail = mail_blocks()
-    if not repos and not watch_blocks and not mail:
+    drafts, drafts_stale = drafts_blocks()
+    if not repos and not watch_blocks and not mail and not drafts and not drafts_stale:
         return
     cache = load()
     owners = sorted({s.split("/")[0] for s in repos})
@@ -228,8 +250,13 @@ def main():
     if lines:
         blocks.append(f"⚠️ {len(lines)} action(s) post-déploiement en attente pour toi :")
         blocks += capped(lines)
-    blocks += watch_blocks + mail
+    blocks += watch_blocks + mail + drafts
+    refresh_hint = "".join(f"\nLe compte des brouillons Mintlify ({sub}) date de plus d'un jour : appelle une fois l'outil Mintlify"
+                           f" `status` (subdomain {sub}, branche main) sans le commenter, il le remet à jour." for sub in drafts_stale)
     if not blocks:
+        if refresh_hint:
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": refresh_hint.strip()}},
+                             ensure_ascii=False))
         return
     msg = "\n".join(blocks)
     ready_hint = ("\nPour une PR « prête à merger », propose de la merger et ne le fais que quand l'utilisateur le dit :"
@@ -240,7 +267,8 @@ def main():
         "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": msg +
             "\nRappelle ces points en une ligne dans ta première réponse. Si l'utilisateur veut créer une PR alors qu'il a des PR"
             " assignées à merger, rappelle-lui de les merger d'abord." + ready_hint +
-            ("\nPour une promesse client due, propose de préparer le mail de suivi avec le skill mail." if mail else "")},
+            ("\nPour une promesse client due, propose de préparer le mail de suivi avec le skill mail." if mail else "") +
+            refresh_hint},
     }, ensure_ascii=False))
 
 

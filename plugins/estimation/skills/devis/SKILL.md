@@ -48,6 +48,7 @@ Additionner les bas et les hauts séparément. Le **délai** = l'attente des poi
 
 1. **Le devis client**, une page Notion au format `references/devis-template.md` :
    - en langage clair, par sous-partie, en disant ce que chaque partie apporte (sécurité, tests, reprise sur erreur, recette) ;
+   - avec le **total en tête de page**, dans un encadré (callout Notion), puis en dernière ligne du tableau de synthèse ;
    - avec la fourchette, les hypothèses, et ce qu'on attend du client (ses points d'arrêt) ;
    - sans nom interne : ni autres clients, ni noms de code, ni outils internes.
 2. **La fiche interne**, dans la réponse et pas dans le devis : un tableau *lot | attention | temps Claude | points d'arrêt | découverte API*, plus les livraisons de l'historique utilisées comme ancres, avec leur écart.

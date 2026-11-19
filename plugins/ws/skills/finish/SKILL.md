@@ -22,6 +22,7 @@ Parse the output:
 
 - Everything **before** `===WS-FINISH-MACHINE===` is the human recap → show it to the user as-is (you may translate it).
 - Everything **after** is `key=value` data for Step 3: `WS_SLOT`, `WS_PATH`, `WS_SLUG`, `WS_MODE`, `WS_PROJECT_ROOT`, `WS_CONFIG`, `WS_PORTS`, `WS_SPEC`, `WS_HISTORY`, `WS_ACTUALS`, `OVERALL`.
+- Zero or more `WS_DOC=<name>\t<files>` lines: docs (from the config's `docs` list) whose paths this branch touched. Handled in Step 3, before the teardown.
 
 Handle the edge cases:
 
@@ -46,7 +47,9 @@ Anything other than yes → tell the user the workspace was **not** removed, and
 
 ## Step 3 — Execute (ONE call) + silent memory
 
-On `yes`, run the orchestrated teardown. It kills the ports, runs the `pre_destroy` hook, drops the isolated `_w<slot>` DBs, removes the worktrees, deletes the directory (preserved in attached mode), frees the slot, resets the terminal, and closes the workspace window:
+On `yes`, **first** refresh each `WS_DOC` (the worktree is still there): read that entry's `instructions` in `WS_CONFIG`, look at the touched files in the workspace, and follow the instructions. If a doc update fails, say so in one line and continue — it never blocks the teardown.
+
+Then run the orchestrated teardown. It kills the ports, runs the `pre_destroy` hook, drops the isolated `_w<slot>` DBs, removes the worktrees, deletes the directory (preserved in attached mode), frees the slot, resets the terminal, and closes the workspace window:
 
 ```bash
 CONFIG="<WS_CONFIG>" PROJECT_ROOT="<WS_PROJECT_ROOT>" \
